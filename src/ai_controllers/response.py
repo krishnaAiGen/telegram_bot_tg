@@ -37,13 +37,13 @@ db = firestore.client()
 def telegram_react(reaction_string, sim_model):
     message_type, human_crypto_score = classify_human_blockchain.predict(reaction_string)
     if message_type == 'human':
-        content = "you are a human. reply to this message': " + reaction_string
+        content = "Imagine you are a human being. reply to this message': " + reaction_string
         human_reply = get_llm_response(content)
         
         return human_reply
     else:
         persona = get_persona_type(reaction_string, sim_model)
-        content = personas[persona] + " you are a human with knowledge of crypto and AI. reply to this message: " + reaction_string
+        content = personas[persona] + " Imagine you are a human with knowledge of crypto and AI. reply to this message: " + reaction_string
         
         crypto_reply = get_llm_response(content)
         
@@ -89,13 +89,14 @@ if __name__ == "__main__":
     
     while True:
         try:
-            react_status, reaction_string, reacted_to, inititate_status = conversation_initiate_status(db)
+            react_status, reaction_string, reacted_to, inititate_status, last_message_date = conversation_initiate_status(db)
             initiation_send_status = check_initiation_send_status()
             
             print_dict = {
                 "react_status": react_status,
                 "initiate_status": inititate_status,
-                "initiation_send_status": initiation_send_status
+                "initiation_send_status": initiation_send_status,
+                "last_message_date" : last_message_date
                 }
             
             print("\n ", print_dict)

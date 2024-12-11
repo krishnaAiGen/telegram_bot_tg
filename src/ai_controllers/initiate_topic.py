@@ -222,10 +222,10 @@ def send_random_talks():
             for random_conv_time in random_conversation_time_list:
                 if random_conv_time == current_time:
                     if random_content == "greetings":
-                        content = f"as a human post message which should be {random_content}"
+                        content = "Imagine you're greeting a friend in a group. Write a warm and friendly message"
                     
                     else:
-                        content = f"You are a human who have crypto, web3, and AI knowledge. say something, to post as message which should be {random_content}"
+                        content = "You are a human who have crypto, web3, and AI knowledge. Compose a thought-provoking message that could be either the future of web3, blockchain, AI, issues related with it, or question related to it."
 
                     reply = get_llm_response(content)
                     # print(f"random conversation {reply} sent to telegram")

@@ -120,7 +120,7 @@ def conversation_initiate_status(db):
     
     LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
     
-    return react_status, reaction_string, reacted_to, inititate_status
+    return react_status, reaction_string, reacted_to, inititate_status, LAST_MESSAGE_DATE
     
 
 def create_db(directory, filename="discussed_topic.json"):
