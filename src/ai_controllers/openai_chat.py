@@ -27,7 +27,7 @@ def get_llm_response(content):
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": content}
         ],
-        "max_tokens": 150  # Limit the response length
+        "max_tokens": 300  # Limit the response length
     }
     
     # Send a POST request to the OpenAI API

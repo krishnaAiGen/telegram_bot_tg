@@ -37,13 +37,13 @@ db = firestore.client()
 def telegram_react(reaction_string, sim_model):
     message_type, human_crypto_score = classify_human_blockchain.predict(reaction_string)
     if message_type == 'human':
-        content = "you are a human being. reply to this message and don't reply messages so that you can be revealed as bot': " + reaction_string
+        content = "you are a human. reply to this message': " + reaction_string
         human_reply = get_llm_response(content)
         
         return human_reply
     else:
         persona = get_persona_type(reaction_string, sim_model)
-        content = personas[persona] + " reply to this message: " + reaction_string
+        content = personas[persona] + " you are a human with knowledge of crypto and AI. reply to this message: " + reaction_string
         
         crypto_reply = get_llm_response(content)
         
