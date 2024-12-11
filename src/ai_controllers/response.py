@@ -94,7 +94,8 @@ if __name__ == "__main__":
             
             print_dict = {
                 "react_status": react_status,
-                "initiate_status": inititate_status
+                "initiate_status": inititate_status,
+                "initiation_send_status": initiation_send_status
                 }
             
             print("\n ", print_dict)

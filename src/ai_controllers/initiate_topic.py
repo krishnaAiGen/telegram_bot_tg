@@ -221,11 +221,17 @@ def send_random_talks():
             
             for random_conv_time in random_conversation_time_list:
                 if random_conv_time == current_time:
-                    content = f"You are a human who have crypto, web3, and AI knowledge. say something, to post as message which should be {random_content}"
+                    if random_content == "greetings":
+                        content = f"as a human post message which should be {random_content}"
+                    
+                    else:
+                        content = f"You are a human who have crypto, web3, and AI knowledge. say something, to post as message which should be {random_content}"
+
                     reply = get_llm_response(content)
-                    print(f"ranom conversation {reply} sent to telegram")
+                    # print(f"random conversation {reply} sent to telegram")
                     send_to_telegram("random_topic", reply)
                     random_conversation_time_list.remove(random_conv_time)
+                    save_list(random_conversation_time_list, file_path)
                     
                 
 
