@@ -178,8 +178,8 @@ def random_conversation_timestamp():
             # First timestamp
             random_timestamps.append(current_time)
         else:
-            # Add at least 5 hours (18000 seconds) to the last timestamp
-            min_gap = random_timestamps[-1] + timedelta(hours=8)
+            # Add at least 16 hours (18000 seconds) to the last timestamp
+            min_gap = random_timestamps[-1] + timedelta(hours=16)
             random_seconds = random.randint(0, 3600)  # Add up to an extra hour for randomness
             next_timestamp = min_gap + timedelta(seconds=random_seconds)
             random_timestamps.append(next_timestamp)
@@ -211,9 +211,17 @@ def send_random_talks():
             now = datetime.now()
             current_time = now.strftime("%Y-%m-%d %H")
             
+            random_content_dict = {
+                "1": "greetings",
+                "2":"queries",
+                "3":"discussion topic"
+                }
+            
+            random_content = random_content_dict[str(random.randint(1, 3))]
+            
             for random_conv_time in random_conversation_time_list:
                 if random_conv_time == current_time:
-                    content = "You are a human who have crypto, web3, and AI knowledge. say something, to post as message, it can be greeting, queries, discussion anything."
+                    content = f"You are a human who have crypto, web3, and AI knowledge. say something, to post as message which should be {random_content}"
                     reply = get_llm_response(content)
                     print(f"ranom conversation {reply} sent to telegram")
                     send_to_telegram("random_topic", reply)

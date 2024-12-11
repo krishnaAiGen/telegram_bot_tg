@@ -92,8 +92,7 @@ if __name__ == "__main__":
             react_status, reaction_string, reacted_to, inititate_status = conversation_initiate_status(db)
             initiation_send_status = check_initiation_send_status()
             
-            # inititate_status = True
-            # initiation_send_status = True
+            print(react_status, reaction_string, reacted_to, inititate_status, initiation_send_status)
             
             send_random_message_status = True
             
@@ -114,7 +113,7 @@ if __name__ == "__main__":
             
         except Exception as e:
             print("--------error occured-------", e)
-            save_error(e)
+            save_error(str(e))
             continue
         
         time.sleep(60)

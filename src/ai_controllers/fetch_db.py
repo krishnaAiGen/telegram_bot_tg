@@ -62,3 +62,4 @@ def get_last_message(collection_name, db):
 
     return message_list
 
+

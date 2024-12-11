@@ -54,9 +54,13 @@ def clean_bots(chat_messages):
 
 def conversation_initiate_status(db):
     global LAST_MESSAGE_DATE
-    timezone = pytz.timezone('Asia/Kolkata')
-    given_date = timezone.localize(datetime(2024, 12, 10, 10, 0)) 
-    current_date = datetime.now(given_date.tzinfo)
+    # timezone = pytz.timezone('Asia/Kolkata')
+    # given_date = timezone.localize(datetime(2024, 12, 10, 10, 0)) 
+    # current_date = datetime.now(given_date.tzinfo)
+    # current_date = datetime.fromisoformat(current_date)
+    
+    current_time = get_ist_time()
+    current_time = datetime.fromisoformat(current_time)
     
     inititate_status = False
     react_status = False
@@ -82,9 +86,11 @@ def conversation_initiate_status(db):
                 
         return
     
-    if LAST_MESSAGE_DATE == 0:
-        LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
+    # if LAST_MESSAGE_DATE == 0:
+        # LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
     
+    LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
+
     
     """
     This logic is for checking whether to react or not
@@ -94,16 +100,19 @@ def conversation_initiate_status(db):
     initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = 2)
 
     
-    if current_message_date > datetime.fromisoformat(LAST_MESSAGE_DATE):       
+    if current_time > datetime.fromisoformat(LAST_MESSAGE_DATE):       
         react_status = True
-        reaction_string = chat_messages[LAST_MESSAGE_DATE]['text']
-        reacted_to = chat_messages[LAST_MESSAGE_DATE]['sender_id']
-    
+        # reaction_string = chat_messages[LAST_MESSAGE_DATE]['text']
+        # reacted_to = chat_messages[LAST_MESSAGE_DATE]['sender_id']
+        
+        reaction_string = chat_messages[next(iter(chat_messages))]['text']
+        reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+            
     
     """
     This logic checks whether to initiate chat or not.
     """
-    if current_message_date > initiate_treshold_date:
+    if current_time > initiate_treshold_date:
         discussion_list = load_list(config['data_dir'] + 'discussion.txt')
         if len(discussion_list) == 0:
             inititate_status = True
