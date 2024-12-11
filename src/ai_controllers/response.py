@@ -92,7 +92,12 @@ if __name__ == "__main__":
             react_status, reaction_string, reacted_to, inititate_status = conversation_initiate_status(db)
             initiation_send_status = check_initiation_send_status()
             
-            print(react_status, reaction_string, reacted_to, inititate_status, initiation_send_status)
+            print_dict = {
+                "react_status": react_status,
+                "initiate_status": inititate_status
+                }
+            
+            print("\n ", print_dict)
             
             send_random_message_status = True
             

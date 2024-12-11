@@ -100,10 +100,8 @@ def conversation_initiate_status(db):
     initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = 2)
 
     
-    if current_time > datetime.fromisoformat(LAST_MESSAGE_DATE):       
+    if current_time > react_treshold_date:       
         react_status = True
-        # reaction_string = chat_messages[LAST_MESSAGE_DATE]['text']
-        # reacted_to = chat_messages[LAST_MESSAGE_DATE]['sender_id']
         
         reaction_string = chat_messages[next(iter(chat_messages))]['text']
         reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
