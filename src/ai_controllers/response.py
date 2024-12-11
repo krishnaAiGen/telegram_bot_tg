@@ -110,10 +110,14 @@ if __name__ == "__main__":
             if send_random_message_status:
                 send_random_talks()
             
+            print("Next scan in 1:00")
+            
         except Exception as e:
             print("--------error occured-------", e)
             save_error(e)
             continue
+        
+        time.sleep(60)
     
     close_firebase_client(app)
 
