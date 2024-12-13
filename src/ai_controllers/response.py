@@ -20,6 +20,10 @@ from utils import *
 import firebase_admin
 from firebase_admin import credentials, firestore
 from openai_chat import * 
+from slack_bot import post_error_to_slack
+import traceback
+
+
 # from telegram_utils import send_main
 
 
@@ -43,7 +47,7 @@ def telegram_react(reaction_string, sim_model):
         return human_reply
     else:
         persona = get_persona_type(reaction_string, sim_model)
-        content = personas[persona] + " Imagine you are a human with knowledge of crypto and AI. reply to this message but keep reply within 20-40 words: " + reaction_string
+        content = personas[persona] + " Imagine you are a human with knowledge of crypto, AI and web3 space. Give a creative reply to this message but keep reply within 20-40 words: " + reaction_string
         
         crypto_reply = get_llm_response(content)
         
@@ -120,15 +124,13 @@ if __name__ == "__main__":
             
         except Exception as e:
             print("--------error occured-------", e)
+            post_error_to_slack(str(traceback.format_exc()))
             save_error(str(e))
             continue
         
-        time.sleep(60)
+        time.sleep(60*30)
     
     close_firebase_client(app)
-
-            
-            
 
 
 

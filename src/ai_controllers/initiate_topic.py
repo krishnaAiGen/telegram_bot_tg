@@ -97,7 +97,7 @@ def get_bot_conversation(topic, sim_model):
     
     persona = get_persona_type(topic, sim_model)
     persona_template = personas[persona]
-    message = persona_template + ". people are discussion about " + topic + f"What do you think about it. Write a response within 20 words to it with emojis and don't tell you are {persona}."
+    message = persona_template + ". people are discussing about " + topic + f"What do you think about it. Write a response within 20 words to it with emojis and don't tell you are {persona}."
     persona_reply = get_llm_response(message)
     
     time = random.randint(5, 60)

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from utils import *
 import pytz  
 from telegram_utils import save_list1, load_list1
+import random
 
 
 
@@ -25,7 +26,8 @@ def send_to_telegram(message_type, reply):
     
     else:
         record_conversation = load_dictionary(record_conversation_filename)
-        record_conversation[message_type] = reply
+        ist_time = get_ist_time()
+        record_conversation[ist_time] = message_type + '----' + reply
         save_dictionary(record_conversation, record_conversation_filename)
     
     file_name = config['data_dir'] + 'polkassembly_message.txt'
@@ -45,19 +47,34 @@ def send_to_telegram(message_type, reply):
 
 
 def clean_bots(chat_messages):
-    bot_id_list = [99, 22]
-    for key, value in chat_messages.items():
-        if value['sender_id'] in bot_id_list:
+    clean_bot_filename = config['data_dir'] + 'clean_bot.json'
+    if not os.path.exists(clean_bot_filename):
+        clean_bot = {}
+        clean_bot['counter'] = 10
+        save_dictionary(clean_bot, clean_bot_filename)
+    
+    else:
+        clean_bot = load_dictionary(clean_bot_filename)
+        clean_bot_number = clean_bot['counter']
+        if clean_bot_number == 0:
+            clean_bot_number = 10
+        
+        else:
+            clean_bot_number = clean_bot_number - 1 
+        
+        clean_bot['counter'] = clean_bot_number
+        save_dictionary(dictionary, filename)
+            
+    if clean_bot_number in [2,4,6,8,9]:
+        bot_id_list = [7347516532, 7235202962, 7661414514]
+        keys_to_delete = [key for key, value in chat_messages.items() if value['sender_id'] in bot_id_list]
+        for key in keys_to_delete:
             del chat_messages[key]
     
     return chat_messages
 
 def conversation_initiate_status(db):
     global LAST_MESSAGE_DATE
-    # timezone = pytz.timezone('Asia/Kolkata')
-    # given_date = timezone.localize(datetime(2024, 12, 10, 10, 0)) 
-    # current_date = datetime.now(given_date.tzinfo)
-    # current_date = datetime.fromisoformat(current_date)
     
     current_time = get_ist_time()
     current_time = datetime.fromisoformat(current_time)
@@ -68,6 +85,7 @@ def conversation_initiate_status(db):
     reacted_to = ''
     
     chat_messages1 = get_last_message(config['source_channel'], db)
+    LAST_MESSAGE_DATE = next(iter(chat_messages1)).strftime('%Y-%m-%d %H:%M:%S')
     chat_messages1 = clean_bots(chat_messages1)
     
     #changing the UTC time to 5:30 hrs backward
@@ -78,49 +96,52 @@ def conversation_initiate_status(db):
         chat_messages[new_time] = value
         
     
-    
     if len(chat_messages) == 0:
         react_status = False
         reaction_string = ''
         reacted_to = ''
-                
-        return
-    
-    # if LAST_MESSAGE_DATE == 0:
-        # LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
-    
-    LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
-
-    
-    """
-    This logic is for checking whether to react or not
-    """
-    current_message_date = datetime.fromisoformat(next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S'))
-    react_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = 1)
-    initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = 2)
-
-    
-    if current_time > react_treshold_date:       
-        react_status = True
         
-        reaction_string = chat_messages[next(iter(chat_messages))]['text']
-        reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+        initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = random.randint(2, 5))
+        """
+        This logic checks whether to initiate chat or not.
+        """
+        if current_time > initiate_treshold_date:
+            discussion_list = load_list(config['data_dir'] + 'discussion.txt')
+            if len(discussion_list) == 0:
+                inititate_status = True
             
+            else:
+                inititate_status = False
+                     
+        return react_status, reaction_string, reacted_to, inititate_status, LAST_MESSAGE_DATE
     
-    """
-    This logic checks whether to initiate chat or not.
-    """
-    if current_time > initiate_treshold_date:
-        discussion_list = load_list(config['data_dir'] + 'discussion.txt')
-        if len(discussion_list) == 0:
-            inititate_status = True
+    else:            
+        """
+        This logic is for checking whether to react or not
+        """
+        react_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = random.randint(1, 3))
+        initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = random.randint(2, 5))
+            
+        if current_time > react_treshold_date:       
+            react_status = True
+            
+            reaction_string = chat_messages[next(iter(chat_messages))]['text']
+            reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+                
         
-        else:
-            inititate_status = False
-    
-    LAST_MESSAGE_DATE = next(iter(chat_messages)).strftime('%Y-%m-%d %H:%M:%S')
-    
-    return react_status, reaction_string, reacted_to, inititate_status, LAST_MESSAGE_DATE
+        """
+        This logic checks whether to initiate chat or not.
+        """
+        if current_time > initiate_treshold_date:
+            discussion_list = load_list(config['data_dir'] + 'discussion.txt')
+            if len(discussion_list) == 0:
+                inititate_status = True
+            
+            else:
+                inititate_status = False
+        
+        
+        return react_status, reaction_string, reacted_to, inititate_status, LAST_MESSAGE_DATE
     
 
 def create_db(directory, filename="discussed_topic.json"):
@@ -169,6 +190,5 @@ def send_initiation_chat():
         
         
 
-    
-    
+
     
