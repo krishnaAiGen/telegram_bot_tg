@@ -52,6 +52,7 @@ def clean_bots(chat_messages):
         clean_bot = {}
         clean_bot['counter'] = 10
         save_dictionary(clean_bot, clean_bot_filename)
+        clean_bot_number = clean_bot['counter']
     
     else:
         clean_bot = load_dictionary(clean_bot_filename)
@@ -63,7 +64,7 @@ def clean_bots(chat_messages):
             clean_bot_number = clean_bot_number - 1 
         
         clean_bot['counter'] = clean_bot_number
-        save_dictionary(dictionary, filename)
+        save_dictionary(clean_bot, clean_bot_filename)
             
     if clean_bot_number in [2,4,6,8,9]:
         bot_id_list = [7347516532, 7235202962, 7661414514]

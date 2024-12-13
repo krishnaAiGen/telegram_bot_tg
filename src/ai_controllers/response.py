@@ -125,7 +125,8 @@ if __name__ == "__main__":
         except Exception as e:
             print("--------error occured-------", e)
             post_error_to_slack(str(traceback.format_exc()))
-            save_error(str(e))
+            save_error(str(traceback.format_exc()))
+            time.sleep(60*30)
             continue
         
         time.sleep(60*30)
