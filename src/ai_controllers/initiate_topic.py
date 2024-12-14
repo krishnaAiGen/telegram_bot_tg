@@ -124,7 +124,7 @@ def get_bot_conversation(topic, sim_model):
             emoji_text = "without emoji"
         
         persona_template = personas[persona]
-        message = persona_template + ". people are discussion about " + topic + f"What do you think about it. Write a response within {random_number_words} words to it {emoji_text} and don't tell you are {persona}."
+        message = persona_template + ". people are discussing about " + topic + f"What do you think about it. Write a response within {random_number_words} words to it {emoji_text} and don't tell you are {persona}."
         persona_reply = get_llm_response(message)
         timeframe = timeframe_dict[index]
         time = random.randint(timeframe[0], timeframe[1])
@@ -225,8 +225,8 @@ def send_random_talks():
                         content = "Imagine you're greeting a friend in a group. Write a warm and friendly message. Keep it short wihin 10 words"
                     
                     else:
-                        content = "You are a human who have crypto, web3, and AI knowledge. Compose a thought-provoking message that could be either the future of web3, blockchain, AI, issues related with it, or question related to it. Keep it short within 20-40 words"
-
+                        content = personas[list(personas.keys())[random.randint(0, 9)]] + " raise a question or a topic for discussion but keeep it short in 20-40 words."
+                        
                     reply = get_llm_response(content)
                     # print(f"random conversation {reply} sent to telegram")
                     send_to_telegram("random_topic", reply)

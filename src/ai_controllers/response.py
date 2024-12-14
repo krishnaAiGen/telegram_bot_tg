@@ -47,7 +47,7 @@ def telegram_react(reaction_string, sim_model):
         return human_reply
     else:
         persona = get_persona_type(reaction_string, sim_model)
-        content = personas[persona] + " Imagine you are a human with knowledge of crypto, AI and web3 space. Give a creative reply to this message but keep reply within 20-40 words: " + reaction_string
+        content = personas[persona] + " Craft a reply in 20-40 words for following statement : " + reaction_string
         
         crypto_reply = get_llm_response(content)
         
@@ -96,6 +96,9 @@ if __name__ == "__main__":
             react_status, reaction_string, reacted_to, inititate_status, last_message_date = conversation_initiate_status(db)
             initiation_send_status = check_initiation_send_status()
             
+            # inititate_status = True
+            # initiation_send_status = True
+            
             print_dict = {
                 "react_status": react_status,
                 "initiate_status": inititate_status,
@@ -120,16 +123,16 @@ if __name__ == "__main__":
             if send_random_message_status:
                 send_random_talks()
             
-            print("Next scan in 1:00")
+            print("Next scan in 30:00")
             
         except Exception as e:
             print("--------error occured-------", e)
             post_error_to_slack(str(traceback.format_exc()))
             save_error(str(traceback.format_exc()))
-            time.sleep(60*30)
+            time.sleep(60*random.randint(20, 50))
             continue
         
-        time.sleep(60*30)
+        time.sleep(60*random.randint(20, 50))
     
     close_firebase_client(app)
 

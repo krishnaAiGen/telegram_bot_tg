@@ -72,7 +72,7 @@ def clean_bots(chat_messages):
         for key in keys_to_delete:
             del chat_messages[key]
     
-    return chat_messages
+    return chat_messages    
 
 def conversation_initiate_status(db):
     global LAST_MESSAGE_DATE
@@ -122,12 +122,30 @@ def conversation_initiate_status(db):
         """
         react_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = random.randint(1, 3))
         initiate_treshold_date = datetime.fromisoformat(LAST_MESSAGE_DATE) + timedelta(hours = random.randint(2, 5))
-            
+        
+        multiple_check_filename = config['data_dir'] + 'multiple_check.json'
+        multiple_check_dict = load_dictionary(multiple_check_filename)
         if current_time > react_treshold_date:       
-            react_status = True
             
             reaction_string = chat_messages[next(iter(chat_messages))]['text']
             reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+            
+            if multiple_check_dict[reaction_string] > random.randint(1, 3):
+                react_status = False
+            
+            else:
+                react_status = True
+
+            
+            if not os.path.exists(multiple_check_filename):
+                multiple_check_dict = {}
+                multiple_check_dict[reaction_string] = 1
+                save_dictionary(multiple_check_dict, multiple_check_filename)
+            
+            else:
+                multiple_check_dict = load_dictionary(multiple_check_filename)
+                multiple_check_dict[reaction_string] = multiple_check_dict[reaction_string] + 1 
+                save_dictionary(multiple_check_dict, multiple_check_filename)
                 
         
         """
@@ -176,19 +194,12 @@ def send_initiation_chat():
         return 
     
     else:
-        counter = 0
-        for key, value in time_persona_dict.items():
-            if key == current_time:
-                discussion_list = load_list(config['data_dir'] + 'discussion.txt')
-                send_to_telegram("initiation", value)
-                del time_persona_dict[key]
-                discussion_list.pop(counter)
-                
-                save_dictionary(time_persona_dict, config['data_dir'] + 'time_persona.json')
-                save_list(discussion_list, config['data_dir'] + 'discussion.txt')
-
-            counter = counter + 1
+        new_time_persona_dict = {key: value for key, value in time_persona_dict.items() if key != current_time}
+        if current_time in time_persona_dict:
+            send_to_telegram("initiation", time_persona_dict[current_time][1])
+            save_dictionary(new_time_persona_dict, config['data_dir'] + 'time_persona.json')
         
+                
         
 
 
