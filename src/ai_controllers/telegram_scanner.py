@@ -44,7 +44,7 @@ def send_to_telegram(message_type, reply):
         polkassembly_message.append(reply)
         save_list1(polkassembly_message, config['data_dir'] + 'polkassembly_message.txt')
         print(f"message {reply} was saved to polkassembly_message")
-
+        
 
 def clean_bots(chat_messages):
     clean_bot_filename = config['data_dir'] + 'clean_bot.json'
@@ -180,6 +180,12 @@ def create_db(directory, filename="discussed_topic.json"):
 
         with open(file_name, 'wb') as file:
             pickle.dump(empty_list, file)
+    
+            
+    multiple_json_filename = config['data_dir'] + 'multiple_check.json'
+    if not os.path.exists(multiple_json_filename):
+        multiple_check_dict = {}
+        save_dictionary(multiple_check_dict, multiple_json_filename)
     
     else:
         print(f"File '{filename}' already exists in '{directory}'.")
