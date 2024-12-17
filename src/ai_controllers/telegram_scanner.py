@@ -125,27 +125,23 @@ def conversation_initiate_status(db):
         
         multiple_check_filename = config['data_dir'] + 'multiple_check.json'
         multiple_check_dict = load_dictionary(multiple_check_filename)
-        if current_time > react_treshold_date:       
-            
-            reaction_string = chat_messages[next(iter(chat_messages))]['text']
-            reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+        reaction_string = chat_messages[next(iter(chat_messages))]['text']
+        reacted_to = chat_messages[next(iter(chat_messages))]['sender_id']
+        
+        if current_time > react_treshold_date and reaction_string in multiple_check_dict.keys():       
             
             if multiple_check_dict[reaction_string] > random.randint(1, 3):
                 react_status = False
             
             else:
                 react_status = True
-
-            
-            if not os.path.exists(multiple_check_filename):
-                multiple_check_dict = {}
-                multiple_check_dict[reaction_string] = 1
-                save_dictionary(multiple_check_dict, multiple_check_filename)
-            
-            else:
                 multiple_check_dict = load_dictionary(multiple_check_filename)
                 multiple_check_dict[reaction_string] = multiple_check_dict[reaction_string] + 1 
                 save_dictionary(multiple_check_dict, multiple_check_filename)
+        
+        else:
+            if reaction_string not in multiple_check_dict.keys():
+                multiple_check_dict[reaction_string] = 1
                 
         
         """
