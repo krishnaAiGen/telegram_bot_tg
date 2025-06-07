@@ -1,109 +1,77 @@
+# telegram_utils.py
 import asyncio
 import random
-import time
 import json
 from telethon import TelegramClient
-from utils import load_list, save_list  # Assuming this is imported correctly
-import os
+from utils import StateManager # IMPORTING the unified StateManager
 
-USERS = {    
-    "JoiN9911": {
-        "api_id": 23724256,
-        "api_hash": "e9e6694fcaa2b502c2d2bbae922e4414",
-        "username": "JoiN9911",
-        "phone_no": "+916299207265"
-    },
-    
-    "davethm": {
-        "api_id": 29185654,
-        "api_hash": "b76874a78a10950b85045e9ef94cae39",
-        "username": "davethm",
-        "phone_no": "+2348109475171"
-    },
-    
-    "devtoye": {
-        "api_id": 11150975,
-        "api_hash": "b954ee33b49fc823e024347c6bf3647e",
-        "username": "devtoye",
-        "phone_no": "+2347044735660"
-    }
-}
+class MessageSender:
+    """
+    A standalone process that reads messages from the central queue (managed by StateManager)
+    and sends them to Telegram using a random user account.
+    """
+    def __init__(self, config_path='config.json'):
+        with open(config_path, 'r') as f:
+            self.config = json.load(f)
+        
+        # Preserving the original USERS dictionary
+        self.users = {    
+            "JoiN9911": {"api_id": 23724256, "api_hash": "e9e6694fcaa2b502c2d2bbae922e4414"},
+            "davethm": {"api_id": 29185654, "api_hash": "b76874a78a10950b85045e9ef94cae39"},
+            "devtoye": {"api_id": 11150975, "api_hash": "b954ee33b49fc823e024347c6bf3647e"}
+        }
+        self.destination_channel = '@' + self.config['destination_channel']
+        
+        # CRITICAL CHANGE: Using the central StateManager for the queue
+        self.state_manager = StateManager(self.config['data_dir'])
+        
+        self.clients = {
+            user: TelegramClient(user, config["api_id"], config["api_hash"])
+            for user, config in self.users.items()
+        }
+        self.client_list = list(self.clients.values())
+        print(f"Initialized {len(self.client_list)} sender accounts.")
 
-# Load config
-with open('config.json', 'r') as json_file:
-    config = json.load(json_file)
-
-# Create clients
-clients = {user: TelegramClient(user, user_config["api_id"], user_config["api_hash"])
-           for user, user_config in USERS.items()}
-
-async def send_message_from_user(user, channel_username, message):
-    if user not in clients:
-        print(f"User {user} not found!")
-        return
-    
-    client = clients[user]
-    async with client:
+    async def _send_message(self, client: TelegramClient, message: str):
+        """Connects a client and sends a message, with human-like typing action."""
         try:
-            await client.send_message(channel_username, message)
-            print(f"Message sent to {channel_username} by {user}: {message}")
+            async with client:
+                print(f"Sending message via {client.session.filename}...")
+                async with client.action(self.destination_channel, 'typing'):
+                    await asyncio.sleep(random.uniform(3, 7))
+                await client.send_message(self.destination_channel, message)
+            print(f"Message sent successfully: '{message[:50]}...'")
         except Exception as e:
-            print(f"Error sending message: {e}")
+            print(f"Error sending message with {client.session.filename}: {e}")
+            # Re-queue the message to be retried
+            self.state_manager.add_message_to_queue(message)
+            print("Message re-queued for a later attempt.")
 
-async def create_session(users):
-    for user in users.keys():
-        print(f"******{user}******")
-        channel_username = '@' + config['destination_channel']
-        message = "Hello"
-        # await send_message_from_user(user, channel_username, message)
-        print(f"Session for {user} created!!")
-
-def get_random_username():
-    return random.choice(list(USERS.keys()))
-
-def load_list1(file_name):
-    with open(file_name, 'r') as file:
-        polkassembly_message = json.load(file)
-    
-    return polkassembly_message
-
-def save_list1(polkassembly_message, file_name):
-    with open(file_name, 'w') as file:
-        json.dump(polkassembly_message, file)
-
-def get_message():
-    telegram_message = load_list1(config['data_dir'] + 'polkassembly_message.txt')
-    return telegram_message[0] if telegram_message else ""
-
-def delete_message():
-    telegram_message = load_list1(config['data_dir'] + 'polkassembly_message.txt')
-    if telegram_message:
-        del telegram_message[0]
-
-    save_list1(telegram_message, config['data_dir'] + 'polkassembly_message.txt')
-
-async def send_main():
-    # Create initial sessions
-    await create_session(USERS)
-    
-    while True:
-        try:
-            channel_username = '@' + config['destination_channel']
-            user = get_random_username()
+    async def run(self):
+        """The main, endless loop for the sender process."""
+        print("Message Sender starting...")
+        while True:
+            try:
+                # UNIFIED LOGIC: Get message from the central queue
+                message = self.state_manager.get_message_from_queue()
+                
+                if message:
+                    random_client = random.choice(self.client_list)
+                    await self._send_message(random_client, message)
+                    
+                    delay = random.uniform(
+                        self.config.get('min_send_delay_secs', 60),
+                        self.config.get('max_send_delay_secs', 180)
+                    )
+                    print(f"Waiting {delay:.1f} seconds before checking queue again...")
+                    await asyncio.sleep(delay)
+                else:
+                    await asyncio.sleep(20)
             
-            if not os.path.exists(config['data_dir'] + 'polkassembly_message.txt'):
-                continue
-            
-            message = get_message()
-            
-            if message!= "":     
-                await send_message_from_user(user, channel_username, message)
-                delete_message()
-            
-            await asyncio.sleep(60)  # Use asyncio.sleep for async functions
-        except Exception as e:
-            print(f"Error in main loop: {e}")
-            continue
+            except Exception as e:
+                print(f"CRITICAL ERROR in sender loop: {e}")
+                await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    asyncio.run(send_main())
+    sender = MessageSender()
+    asyncio.run(sender.run())

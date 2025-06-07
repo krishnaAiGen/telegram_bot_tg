@@ -1,62 +1,81 @@
-from sentence_transformers import util
+# llm_personas.py
 import json
-import re
 import random
+from sentence_transformers import SentenceTransformer, util
+from openai_chat import get_llm_response
 
-with open('prompt.json', 'r') as json_file:
-    personas = json.load(json_file)
+class PersonaManager:
+    """Manages persona selection (both relevant and random) and response generation."""
+    def __init__(self, prompts_path='prompt.json', model_name='all-MiniLM-L6-v2'):
+        # --- 1. Load Prompts and Persona Lists ---
+        # This remains the same: loading configuration data.
+        with open(prompts_path, 'r', encoding='utf-8') as json_file:
+            self.prompts = json.load(json_file)
+        
+        self.non_chat_personas = {'Human', 'randomness', 'generate_topic'}
+        self.chat_personas = [p for p in self.prompts.keys() if p not in self.non_chat_personas]
 
-def get_persona_type(message, sim_model):
-    # Compute embedding for the message
-    message_embedding = sim_model.encode(message, convert_to_tensor=True)
+        # --- 2. Load the Similarity Model (CRITICAL) ---
+        # The SentenceTransformer model is now loaded ONCE when the class is created.
+        # This is highly efficient as it's not reloaded on every message.
+        print("Loading SentenceTransformer model for persona similarity...")
+        self.sim_model = SentenceTransformer(model_name)
+        print("Model loaded.")
 
-    not_included_persona = ['Human', 'randomness', 'generate_topic']
-    # # Compute embeddings for each persona and calculate similarity
-    # similarities = {}
-    # for persona, description in personas.items():
-    #     if persona in not_included_persona:
-    #         continue
-    #     persona_embedding = sim_model.encode(description, convert_to_tensor=True)
-    #     similarity = util.pytorch_cos_sim(message_embedding, persona_embedding).item()
-    #     similarities[persona] = similarity
+        # --- 3. Pre-compute Persona Embeddings (OPTIMIZATION) ---
+        # To make a decision, we need to compare the message embedding to each persona's
+        # description embedding. We can pre-calculate the persona embeddings once.
+        self.persona_embeddings = {
+            persona: self.sim_model.encode(self.prompts[persona], convert_to_tensor=True)
+            for persona in self.chat_personas
+        }
+        print("Pre-computed embeddings for all personas.")
 
-    # # Find the most relevant persona
-    # most_relevant_persona = max(similarities, key=similarities.get)
-    
-    while True:
-        key_persona = list(personas.keys())
-        most_relevant_persona = key_persona[random.randint(0, 11)]
-        if most_relevant_persona not in not_included_persona:
-            break
-    
-    return most_relevant_persona
-    
-def get_human_reply(message, llm):
-    # message = "So... airdrop of the token is still something on or not at all ?"
-    message_length = len(message.split(' '))
 
-    message = personas["Human"] + f' in {message_length} words. "' + message + '"'
-    human_reply = llm.invoke(message)
-    
-    return human_reply
-    
+    def get_most_relevant_persona(self, message: str) -> str:
+        """
+        Determines the best persona by calculating cosine similarity.
+        This RESTORES your original, more complex logic.
+        """
+        if not message:
+            return self.get_random_persona() # Fallback for empty messages
 
-def get_crypto_reply(message, llm, persona):
-    message = personas[persona] + personas["randomness"] +  message
-    crypto_reply = llm.invoke(message)
-    
-    return crypto_reply
+        # 1. Compute embedding for the incoming message.
+        message_embedding = self.sim_model.encode(message, convert_to_tensor=True)
 
-def refine_reply(message):
-   # Remove newline characters
-   response_text = message.replace('\n', ' ')
-   
-   # Remove any symbols or numbers, only keep alphabets and spaces
-   cleaned_text = re.sub(r'[^a-zA-Z ]', '', response_text)
-   
-   # Remove extra spaces
-   cleaned_text = re.sub(r' +', ' ', cleaned_text).strip()
-   
-   return cleaned_text
-    
+        # 2. Calculate similarity against all pre-computed persona embeddings.
+        similarities = {}
+        for persona, persona_embedding in self.persona_embeddings.items():
+            # util.pytorch_cos_sim computes the similarity score between the two embeddings.
+            similarity = util.pytorch_cos_sim(message_embedding, persona_embedding).item()
+            similarities[persona] = similarity
 
+        # 3. Find the persona with the highest similarity score.
+        if not similarities:
+            return self.get_random_persona() # Fallback if something goes wrong
+
+        most_relevant_persona = max(similarities, key=similarities.get)
+        print(f"Most relevant persona for message is '{most_relevant_persona}' with score {similarities[most_relevant_persona]:.2f}")
+        
+        return most_relevant_persona
+
+    def get_random_persona(self) -> str:
+        """
+        Selects a random persona. This is needed for initiating conversations
+        when there is no message to analyze.
+        """
+        return random.choice(self.chat_personas)
+
+    async def generate_reaction(self, persona: str, text: str) -> str:
+        """Generates a contextual reply for a given persona reacting to text."""
+        prompt = (
+            f"{self.prompts[persona]} "
+            f"You are in a group chat. Craft a thoughtful and relevant reply in 20-50 words to the following statement. "
+            f"Use emojis to seem natural. Do not reveal you are a persona. Statement: \"{text}\""
+        )
+        return await get_llm_response(prompt)
+
+    async def generate_human_like_reply(self, text: str) -> str:
+        """Generates a generic, human-like reply based on the 'Human' persona prompt."""
+        prompt = f"{self.prompts['Human']} for this message: \"{text}\""
+        return await get_llm_response(prompt)

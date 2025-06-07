@@ -1,0 +1,19 @@
+{
+  "openai_api_key": "your_key",
+  "firebase_cred": "path of firebase-credentials.json",
+  "webhook_url": "slack_webhook_url",
+  "source_channel": "source_channel_name",
+  "destination_channel": "destination_channel_name",
+  "chat_classify": "path of trained_model",
+  "data_dir": "path of bot_data",
+  "min_initiate_hours": 2.0,
+  "max_initiate_hours": 5.0,
+  "min_react_mins": 60.0,
+  "max_react_mins": 180.0,
+  "min_send_delay_secs": 60.0,
+  "max_send_delay_secs": 180.0,
+  "min_convo_bots": 2,
+  "max_convo_bots": 5,
+  "min_reply_delay_mins": 5,
+  "max_reply_delay_mins": 30
+}

@@ -1,84 +1,77 @@
-import pickle
+# utils.py
 import json
-from datetime import datetime, timedelta
-import pickle
 import os
 from datetime import datetime
 import pytz
 
-with open('config.json', 'r') as json_file:
-    config = json.load(json_file)
+class StateManager:
+    """Manages all file-based state for the application in a safe, central location."""
+    def __init__(self, data_dir: str):
+        self.data_dir = data_dir
+        os.makedirs(self.data_dir, exist_ok=True)
+        
+        self.discussed_topics_file = os.path.join(data_dir, 'discussed_topic.json')
+        self.message_queue_file = os.path.join(data_dir, 'polkassembly_message.txt')
+        self.reaction_log_file = os.path.join(data_dir, 'multiple_check.json')
+        self.error_file = os.path.join(data_dir, 'error.json')
+        
+        self._init_json_file(self.discussed_topics_file, {})
+        self._init_json_file(self.message_queue_file, [])
+        self._init_json_file(self.reaction_log_file, {})
+        self._init_json_file(self.error_file, {})
 
-def save_dictionary(dictionary, filename):        
-    with open(filename, 'w', encoding='utf-8') as json_file:
-        json.dump(dictionary, json_file, indent=4)  # Use indent for pretty
+    def _init_json_file(self, file_path, default_content):
+        if not os.path.exists(file_path):
+            self.save_json(file_path, default_content)
 
-def load_dictionary(filename):
-    with open(filename, 'r', encoding='utf-8') as json_file:
-        return json.load(json_file)
+    def load_json(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return [] if 'polkassembly_message' in file_path else {}
 
-def save_list(lst, filename):
-    with open(filename, 'wb') as file:
-        pickle.dump(lst, file)
+    def save_json(self, file_path, data):
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
 
-def load_list(filename):
-    # filename = filename + 'discussion.txt'
-    with open(filename, 'rb') as file:
-        return pickle.load(file)
+    def add_message_to_queue(self, message: str):
+        queue = self.load_json(self.message_queue_file)
+        queue.append(message)
+        self.save_json(self.message_queue_file, queue)
 
+    def get_message_from_queue(self) -> str | None:
+        queue = self.load_json(self.message_queue_file)
+        if not queue:
+            return None
+        message = queue.pop(0)
+        self.save_json(self.message_queue_file, queue)
+        return message
 
-def store_initiate_conversation(conversations_dict):
-    time_persona_dict = {}
-    description_list = []
-    now = datetime.now()
-    # current_time = now.strftime("%H:%M")
+    def is_topic_discussed(self, topic: str) -> bool:
+        discussed = self.load_json(self.discussed_topics_file)
+        return topic.lower() in [v.lower() for v in discussed.values()]
 
-    for key, value in conversations_dict.items():
-        temp_list = []
-        for key1, value1 in value.items():
+    def save_discussed_topic(self, topic: str):
+        discussed = self.load_json(self.discussed_topics_file)
+        discussed[get_ist_time()] = topic
+        self.save_json(self.discussed_topics_file, discussed)
 
-            new_time = now + timedelta(minutes=key1)
-            new_time_str = new_time.strftime("%Y-%m-%d %H")
-            temp_list.append(key)
-            temp_list.append(value1)
-            time_persona_dict[new_time_str] = temp_list
-            description_list.append(value1)
-            
-            now = new_time
-    
-    save_dictionary(time_persona_dict, config['data_dir'] + 'time_persona.json')
-    # save_list(description_list, config['data_dir'] + 'discussion.txt')
+    def has_reacted(self, message_text: str) -> bool:
+        log = self.load_json(self.reaction_log_file)
+        return message_text in log
 
-    print("Initiate conversation data saved successfully!")
-    
+    def log_reaction(self, message_text: str):
+        log = self.load_json(self.reaction_log_file)
+        log[message_text] = log.get(message_text, 0) + 1
+        self.save_json(self.reaction_log_file, log)
+
+    def save_error(self, error_traceback: str):
+        errors = self.load_json(self.error_file)
+        errors[get_ist_time()] = error_traceback
+        self.save_json(self.error_file, errors)
+        print(f"Error saved to {self.error_file}")
+
 def get_ist_time():
-    ist_timezone = pytz.timezone('Asia/Kolkata')    
-    current_utc_time = datetime.now(pytz.utc)
-    
-    current_ist_time = current_utc_time.astimezone(ist_timezone)    
-    ist_time_string = current_ist_time.strftime('%Y-%m-%d %H:%M:%S')
-    
-    return ist_time_string
-
-def save_error(error):
-    error_filename = config['data_dir'] + 'error.json'
-    current_time = get_ist_time()
-    
-    if not os.path.exists(error_filename):
-        error_dict = {}
-        error_dict[current_time] = error
-        save_dictionary(error_dict, error_filename)
-    
-    else:
-        error_dict = load_dictionary(error_filename)
-        error_dict[current_time] = error
-        save_dictionary(error_dict, error_filename)
-        
-    print(f"error {error} saved")
-        
-    
-            
-    
-
-
-    
+    ist_timezone = pytz.timezone('Asia/Kolkata')
+    return datetime.now(ist_timezone).strftime('%Y-%m-%d %H:%M:%S')

@@ -1,58 +1,50 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Dec 13 20:09:24 2024
-
-@author: krishnayadav
-"""
-
-import requests
+# slack_bot.py
 import json
+import aiohttp
 
-# Load configuration from the config.json file
+# Load configuration once when the module is imported
 with open('config.json', 'r') as json_file:
     config = json.load(json_file)
 
-# Extract webhook URL from config
-webhook_url = config['webhook_url']
+WEBHOOK_URL = config.get('webhook_url')
 
-def post_to_slack(message):
-      # Convert message dictionary to a string with each key-value on a new line
+# This function is preserved and refactored to be asynchronous as per your instructions.
+async def post_to_slack(message: dict):
+    """Asynchronously posts a dictionary as a formatted message to Slack."""
+    if not WEBHOOK_URL:
+        print("Slack webhook URL not configured. Skipping notification.")
+        return
+
+    # The original formatting logic is preserved.
     formatted_message = "\n".join([f"{key}: {value}" for key, value in message.items()])
     
-    # Create the payload to send to Slack
-    payload = {
-        "text": formatted_message  # Message to send to Slack
-    }
+    payload = { "text": formatted_message }
     
-    try:
-        # Send a POST request to the Slack webhook URL
-        response = requests.post(webhook_url, json=payload)
-    
-        # Check if the request was successful
-        if response.status_code == 200:
-            print("Message posted successfully")
-        else:
-            print(f"Failed to post message: {response.status_code}, {response.text}")
-    
-    except Exception as e:
-        print(f"Error posting message: {e}")
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(WEBHOOK_URL, json=payload) as response:
+                if response.status == 200:
+                    print("Generic message posted successfully to Slack.")
+                else:
+                    print(f"Failed to post generic message: {response.status}, {await response.text()}")
+        except aiohttp.ClientError as e:
+            print(f"Error posting generic message to Slack: {e}")
+
+async def post_error_to_slack(error_message: str):
+    """Asynchronously posts a formatted error message to a Slack channel."""
+    if not WEBHOOK_URL:
+        print("Slack webhook URL not configured. Skipping notification.")
+        return
         
-def post_error_to_slack(error_message):
-    payload = {
-        "text": error_message  # Message to send to Slack
-    }
+    # Formatting the message for better readability in Slack
+    payload = {"text": f"🚨 **Error in Telegram Bot** 🚨\n```\n{error_message}\n```"}
     
-    try:
-        # Send a POST request to the Slack webhook URL
-        response = requests.post(webhook_url, json=payload)
-    
-        # Check if the request was successful
-        if response.status_code == 200:
-            print("Message posted successfully")
-        else:
-            print(f"Failed to post message: {response.status_code}, {response.text}")
-    
-    except Exception as e:
-        print(f"Error posting message: {e}")
-        
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(WEBHOOK_URL, json=payload) as response:
+                if response.status == 200:
+                    print("Error message posted successfully to Slack.")
+                else:
+                    print(f"Failed to post error to Slack: {response.status} {await response.text()}")
+        except aiohttp.ClientError as e:
+            print(f"Error posting to Slack: {e}")
