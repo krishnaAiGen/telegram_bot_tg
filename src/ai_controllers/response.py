@@ -1,144 +1,138 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Oct 21 20:30:13 2024
-
-@author: krishnayadav
-"""
-
-from sentence_transformers import SentenceTransformer, util
-from llm_personas import get_human_reply, get_crypto_reply, get_persona_type, refine_reply
-from classify_chat import ClassifyChat
-from langchain_community.llms import Ollama
-import time
-from telegram_scanner import *
-from initiate_topic import *
-import json
+# src/ai_controllers/response.py
+import asyncio
 import random
-from generate_topic_llm import *
-from utils import * 
+import traceback
+from datetime import datetime, timezone, timedelta
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
-from openai_chat import * 
+
+# Import from our new centralized config and refactored modules
+from config import APP_CONFIG
+from utils import StateManager
+from fetch_db import get_last_message
+from classify_chat import ClassifyChat
+from llm_personas import PersonaManager
+from initiate_topic import ConversationPlanner
+from openai_chat import get_llm_response, is_content_offensive
 from slack_bot import post_error_to_slack
-import traceback
+from telegram_scanner import send_initiation_chat, send_random_talks
 
+# Constants for Memory Management
+MAX_MEMORY_TURNS = 15  # A "turn" is a user message + a bot reply (30 total messages)
+MEMORY_WINDOW = 10     # When memory is full, keep the last 10 turns (20 messages)
 
-# from telegram_utils import send_main
-
-
-with open('config.json', 'r') as json_file:
-    config = json.load(json_file)
-    
-with open('prompt.json', 'r') as json_file:
-    personas = json.load(json_file)
-
-    
-cred = credentials.Certificate(config["firebase_cred"])
-app = firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-def telegram_react(reaction_string, sim_model):
-    message_type, human_crypto_score = classify_human_blockchain.predict(reaction_string)
-    if message_type == 'human':
-        content = "Imagine you are a human being. reply to this message and keep it very short': " + reaction_string
-        human_reply = get_llm_response(content)
+class TelegramBot:
+    """The main class orchestrating the Telegram bot's logic."""
+    def __init__(self):
+        self.config = APP_CONFIG
+        self.state_manager = StateManager()
+        self.classifier = ClassifyChat(self.config['chat_classify_model_path'])
+        self.persona_manager = PersonaManager()
+        self.planner = ConversationPlanner(self.persona_manager)
         
-        return human_reply
-    else:
-        persona = get_persona_type(reaction_string, sim_model)
-        content = personas[persona] + " Craft a reply in 20-40 words for following statement : " + reaction_string
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(self.config['firebase_cred_path'])
+            firebase_admin.initialize_app(cred, name='bot_brain_app')
+        self.db = firestore.client(app=firebase_admin.get_app(name='bot_brain_app'))
         
-        crypto_reply = get_llm_response(content)
+        # Load persistent state for persona assignments
+        self.persona_assignments = self.state_manager.load_json(self.state_manager.assignments_file)
+
+    async def _handle_reaction(self, last_message: dict):
+        """Handles reacting to a message, with memory and a safety guardrail."""
+        text = last_message.get('text')
+        sender_id = str(last_message.get('sender_id'))
+
+        # 1. Get and manage user's conversation memory
+        history = self.state_manager.get_user_memory(sender_id)
+        if len(history) >= MAX_MEMORY_TURNS * 2:
+            history = history[-MEMORY_WINDOW * 2:]
+        history.append({"role": "user", "content": text})
         
-        return crypto_reply
-
-def initiate_bot_conversation(sim_model):
-    #get topic from crypto topic list 
-    topic_list = get_topic_llm(db)
-    topic = topic_list[0]
-    topic_status = get_topic_status(topic)
-    
-    while not topic_status:
-         topic_list = get_topic_llm(db)
-         topic = topic_list[0]
-         topic_status = get_topic_status(topic)
-    
-    #get topic from external hot topic
-    save_topic_to_db(topic)
-    
-    conversations_dict = get_bot_conversation(topic, sim_model)
-    sorted_conversations_dict = dict(sorted(conversations_dict.items(), key=lambda x: list(x[1].keys())[0]))
-
-    
-    store_initiate_conversation(sorted_conversations_dict)
-    
-    return sorted_conversations_dict
-
-def close_firebase_client(app):
-    firebase_admin.delete_app(app)
-    print("Firebase client closed successfully.")
+        conversation_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
         
+        # 2. Select persona and generate reply
+        persona_obj = self.persona_manager.get_most_relevant_persona(text)
+        if not persona_obj: return
 
+        print(f"Reacting with persona '{persona_obj['persona_name']}' from character '{persona_obj['character_name']}'.")
+        
+        msg_type, _ = self.classifier.predict(text)
+        if msg_type == 'human':
+            reply = await self.persona_manager.generate_human_like_reply(text)
+        else:
+            reply = await self.persona_manager.generate_reaction(persona_obj, conversation_context)
+
+        # 3. Check reply with offensive content guardrail
+        if await is_content_offensive(reply):
+            print("Offensive reply blocked by guardrail.")
+            return
+
+        # 4. Update memory and queue the safe message
+        history.append({"role": "assistant", "content": reply})
+        self.state_manager.update_user_memory(sender_id, history)
+        
+        message_to_queue = {"message": reply, "telegram_user": persona_obj.get("telegram_user")}
+        self.state_manager.add_message_to_queue(message_to_queue)
+        self.state_manager.log_reaction(text)
+
+    async def _handle_initiation(self):
+        """Handles initiating a new conversation."""
+        print("Channel is quiet. Planning to initiate a new conversation.")
+        conversation_dict, topic = await self.planner.plan_conversation(self.db, self.config)
+        
+        if not conversation_dict or not topic:
+            print("Could not generate a conversation plan.")
+            return
+
+        if self.state_manager.is_topic_discussed(topic):
+            print(f"Topic '{topic}' has been discussed recently. Skipping initiation.")
+            return
+
+        # The planner returns a dictionary that the state manager knows how to schedule
+        self.state_manager.save_initiation_schedule(conversation_dict)
+        self.state_manager.save_discussed_topic(topic)
+
+    async def main_loop(self):
+        """The main, endless loop that drives the bot's actions."""
+        print("Telegram Bot brain starting main loop...")
+        while True:
+            try:
+                last_message = await get_last_message(self.config['source_channel'], self.db)
+                initiate_now, react_now = False, False
+                
+                if last_message and last_message.get('date'):
+                    time_since = datetime.now(timezone.utc) - last_message['date']
+                    init_thresh = timedelta(hours=random.uniform(self.config['min_initiate_hours'], self.config['max_initiate_hours']))
+                    react_thresh = timedelta(minutes=random.uniform(self.config['min_react_mins'], self.config['max_react_mins']))
+
+                    if time_since > init_thresh:
+                        initiate_now = True
+                    elif time_since > react_thresh and not self.state_manager.has_reacted(last_message['text']):
+                        react_now = True
+                else:
+                    initiate_now = True
+
+                if initiate_now:
+                    await self._handle_initiation()
+                elif react_now:
+                    await self._handle_reaction(last_message)
+                
+                # On every loop, check if any scheduled messages need to be sent
+                send_initiation_chat(self.state_manager)
+                await send_random_talks(self.state_manager, self.persona_manager)
+
+                sleep_duration = random.uniform(15 * 60, 30 * 60)
+                print(f"Logic cycle complete. Sleeping for {sleep_duration/60:.1f} minutes.")
+                await asyncio.sleep(sleep_duration)
+
+            except Exception as e:
+                error_trace = traceback.format_exc()
+                print(f"\n--- FATAL ERROR IN MAIN LOOP ---\n{error_trace}\n")
+                await post_error_to_slack(error_trace)
+                await asyncio.sleep(60 * 10)
 
 if __name__ == "__main__":
-    global sim_model
-    sim_model = SentenceTransformer('all-MiniLM-L6-v2')  # You can choose another model if preferred
-    
-    classify_human_blockchain = ClassifyChat(config['chat_classify'])
-    create_db(config['data_dir'])
-    
-    # asyncio.run(main())
-    # asyncio.run(send_main())
-    
-    while True:
-        try:
-            react_status, reaction_string, reacted_to, inititate_status, last_message_date = conversation_initiate_status(db)
-            initiation_send_status = check_initiation_send_status()
-            
-            # inititate_status = True
-            # initiation_send_status = True
-            
-            print_dict = {
-                "react_status": react_status,
-                "initiate_status": inititate_status,
-                "initiation_send_status": initiation_send_status,
-                "last_message_date" : last_message_date
-                }
-            
-            print("\n ", print_dict)
-            
-            send_random_message_status = True
-            
-            if react_status:
-                reply = telegram_react(reaction_string, sim_model)
-                send_to_telegram("react", reply)
-            
-            if inititate_status:
-                reply = initiate_bot_conversation(sim_model)  
-            
-            if initiation_send_status:
-                send_initiation_chat()
-            
-            if send_random_message_status:
-                send_random_talks()
-            
-            print("Next scan in 30:00")
-            
-        except Exception as e:
-            print("--------error occured-------", e)
-            post_error_to_slack(str(traceback.format_exc()))
-            save_error(str(traceback.format_exc()))
-            time.sleep(60*random.randint(20, 50))
-            continue
-        
-        time.sleep(60*random.randint(20, 50))
-    
-    close_firebase_client(app)
-
-
-
-
-
-
-
+    bot = TelegramBot()
+    asyncio.run(bot.main_loop())

@@ -1,58 +1,69 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Dec 13 20:09:24 2024
+# src/ai_controllers/slack_bot.py
+import aiohttp
+from config import APP_CONFIG
 
-@author: krishnayadav
-"""
+WEBHOOK_URL = APP_CONFIG.get('slack_webhook_url')
 
-import requests
-import json
+async def post_to_slack(message: dict):
+    """
+    Asynchronously posts a dictionary as a formatted message to Slack.
+    This function is preserved from the original codebase.
+    """
+    if not WEBHOOK_URL:
+        # Silently fail if no webhook is configured
+        return
 
-# Load configuration from the config.json file
-with open('config.json', 'r') as json_file:
-    config = json.load(json_file)
-
-# Extract webhook URL from config
-webhook_url = config['webhook_url']
-
-def post_to_slack(message):
-      # Convert message dictionary to a string with each key-value on a new line
     formatted_message = "\n".join([f"{key}: {value}" for key, value in message.items()])
+    payload = { "text": formatted_message }
     
-    # Create the payload to send to Slack
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(WEBHOOK_URL, json=payload, timeout=10) as response:
+                if response.status != 200:
+                    print(f"Failed to post generic message to Slack: {response.status}")
+        except Exception as e:
+            print(f"Error posting generic message to Slack: {e}")
+
+async def post_error_to_slack(error_message: str):
+    """Asynchronously posts a formatted error message to a Slack channel."""
+    if not WEBHOOK_URL:
+        print("Slack webhook URL not configured. Cannot post error.")
+        return
+        
+    # Uses Slack's "blocks" for better formatting of error messages
     payload = {
-        "text": formatted_message  # Message to send to Slack
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🚨 Error in Conversational Bot"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "An exception occurred in one of the application processes."
+                }
+            },
+            {
+			    "type": "divider"
+		    },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```\n{error_message[-2500:]}\n```" # Show last 2500 chars of traceback
+                }
+            }
+        ]
     }
     
-    try:
-        # Send a POST request to the Slack webhook URL
-        response = requests.post(webhook_url, json=payload)
-    
-        # Check if the request was successful
-        if response.status_code == 200:
-            print("Message posted successfully")
-        else:
-            print(f"Failed to post message: {response.status_code}, {response.text}")
-    
-    except Exception as e:
-        print(f"Error posting message: {e}")
-        
-def post_error_to_slack(error_message):
-    payload = {
-        "text": error_message  # Message to send to Slack
-    }
-    
-    try:
-        # Send a POST request to the Slack webhook URL
-        response = requests.post(webhook_url, json=payload)
-    
-        # Check if the request was successful
-        if response.status_code == 200:
-            print("Message posted successfully")
-        else:
-            print(f"Failed to post message: {response.status_code}, {response.text}")
-    
-    except Exception as e:
-        print(f"Error posting message: {e}")
-        
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(WEBHOOK_URL, json=payload, timeout=10) as response:
+                 if response.status != 200:
+                    print(f"Failed to post error to Slack: {response.status}")
+        except Exception as e:
+            print(f"Error posting to Slack: {e}")

@@ -1,65 +1,51 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 28 21:18:29 2024
-
-@author: krishnayadav
-"""
-
+# src/ai_controllers/fetch_db.py
 from google.cloud.firestore import Query
 import datetime
 
-
-
-def get_last_100_message(collection_name, db):
+async def get_last_message(collection_name: str, db) -> dict | None:
+    """
+    Asynchronously fetches the single most recent message from a Firestore collection.
+    Returns the message data as a dictionary, or None if the collection is empty.
+    """
     sanitized_name = collection_name.lstrip('@')
     final_name = f"conversation_ai_{sanitized_name}"
     collection_ref = db.collection(final_name)
     
-    # Fetch the last 100 messages based on the 'date' field
-    data_list = []
-    docs = (
+    # Create an asynchronous stream to get the last document
+    docs_stream = collection_ref.order_by("date", direction=Query.DESCENDING).limit(1).stream()
+    
+    # Use async for to iterate over the stream's results
+    messages = [doc.to_dict() async for doc in docs_stream]
+    
+    if not messages:
+        return None
+        
+    last_message = messages[0]
+    
+    # This is a critical fix to ensure the datetime object is timezone-aware (UTC),
+    # which prevents errors when comparing it to other timezone-aware datetimes.
+    if isinstance(last_message.get('date'), datetime.datetime):
+         last_message['date'] = last_message['date'].replace(tzinfo=datetime.timezone.utc)
+    
+    return last_message
+
+async def get_last_100_message_texts(collection_name: str, db) -> list[str]:
+    """
+    Asynchronously fetches the text content of the last 100 messages.
+    This is used to provide context for generating new conversation topics.
+    """
+    sanitized_name = collection_name.lstrip('@')
+    final_name = f"conversation_ai_{sanitized_name}"
+    collection_ref = db.collection(final_name)
+    
+    docs_stream = (
         collection_ref.order_by("date", direction=Query.DESCENDING)
         .limit(100)
         .stream()
     )
     
-    for doc in docs:
-        doc_data = doc.to_dict()  # Convert the document snapshot to a dictionary
-        data_list.append(doc_data)  # Append the data to the list
-    
-    # Extract the 'text' field from the last 100 messages
-    message_list = [doc['text'] for doc in data_list if 'text' in doc]
-    
-    return message_list
-
-
-def get_last_message(collection_name, db):
-    # Sanitize the collection name
-    sanitized_name = collection_name.lstrip('@')
-    final_name = f"conversation_ai_{sanitized_name}"
-    collection_ref = db.collection(final_name)
-    
-    # Fetch the last 10 messages based on the 'date' field
-    data_list = []
-    docs = (
-        collection_ref.order_by("date", direction=Query.DESCENDING)
-        .limit(1)
-        .stream()
-    )
-    
-    for doc in docs:
-        doc_data = doc.to_dict()  # Convert the document snapshot to a dictionary
-        data_list.append(doc_data)  # Append the data to the list
-    
-    # Create a dictionary with 'date' as keys and 'text' as values
-    message_list = {
-        doc['date']: {'text': doc['text'], 'sender_id': doc['sender_id']}
-        for doc in data_list
-        if 'date' in doc and 'text' in doc and 'sender_id' in doc
-    }
-    
-
-    return message_list
-
-
+    # A concise list comprehension to extract the 'text' from each document
+    message_texts = [
+        doc.to_dict().get('text', '') async for doc in docs_stream if 'text' in doc.to_dict()
+    ]
+    return message_texts

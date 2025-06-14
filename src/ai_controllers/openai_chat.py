@@ -1,38 +1,45 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 28 17:58:40 2024
+# src/ai_controllers/openai_chat.py
+import aiohttp
+from config import APP_CONFIG
 
-@author: krishnayadav
-"""
+API_KEY = APP_CONFIG.get("openai_api_key")
+CHAT_API_URL = "https://api.openai.com/v1/chat/completions"
+MODERATION_API_URL = "https://api.openai.com/v1/moderations"
 
-import requests
-import json
-
-with open('config.json', 'r') as json_file:
-    config = json.load(json_file)
-
-def get_llm_response(content):
-    api_key = config["openai_api_key"]
-    # Set up the headers for the request
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
+async def get_llm_response(content: str, model: str = "gpt-4", max_tokens: int = 300) -> str:
+    """Gets a response from the OpenAI Chat Completion API asynchronously."""
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
+    payload = {"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens}
     
-    # Define the payload for the API request
-    payload = {
-        "model": "gpt-4",  # Specify the model you want to use
-        "messages": [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": content}
-        ],
-        "max_tokens": 300  # Limit the response length
-    }
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(CHAT_API_URL, headers=headers, json=payload, timeout=90) as response:
+                response.raise_for_status()
+                result = await response.json()
+                return result['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Error calling OpenAI Chat API: {e}")
+            return "Error: Could not get a response from the language model."
+
+async def is_content_offensive(text_to_check: str) -> bool:
+    """Checks text against OpenAI's Moderation API. Returns True if flagged."""
+    if not text_to_check:
+        return False
+        
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
+    payload = {"input": text_to_check}
     
-    # Send a POST request to the OpenAI API
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-
-    return response.json()['choices'][0]['message']['content']
-
-
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(MODERATION_API_URL, headers=headers, json=payload, timeout=10) as response:
+                response.raise_for_status()
+                result = await response.json()
+                is_flagged = result["results"][0]["flagged"]
+                
+                if is_flagged:
+                    print(f"GUARDRAIL: Content flagged as offensive. Text: '{text_to_check[:100]}...'")
+                return is_flagged
+        except Exception as e:
+            # If the moderation check fails, we default to assuming the content is safe to avoid blocking the bot.
+            print(f"Warning: Moderation API call failed: {e}. Assuming content is safe as a fallback.")
+            return False
