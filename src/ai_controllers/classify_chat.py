@@ -20,7 +20,7 @@ class ClassifyChat:
         except Exception as e:
             raise IOError(f"Failed to load model from path: {model_path}. Error: {e}")
 
-        # Set the model to evaluation mode, which is crucial for correct predictions
+        # Set the model to evaluation mode, crucial for correct predictions
         self.model.eval()
         self.label_mapping = {0: 'crypto', 1: 'human'}
 
@@ -40,14 +40,14 @@ class ClassifyChat:
         with torch.no_grad():
             outputs = self.model(**encodings)
             logits = outputs.logits
-            # Use softmax to convert raw logits into probabilities
+            # Using softmax to convert raw logits into probabilities
             probs = F.softmax(logits, dim=-1)
             # Find the index with the highest probability
             prediction_idx = torch.argmax(probs, dim=-1).item()
         
         # Map the index to its label
         prediction_label = self.label_mapping[prediction_idx]
-        # Get the actual probability score for the predicted label
+        # Actual probability score for the predicted label
         probability_score = probs[0][prediction_idx].item()
         
         return prediction_label, probability_score

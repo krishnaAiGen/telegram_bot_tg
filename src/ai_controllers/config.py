@@ -37,6 +37,7 @@ APP_CONFIG = {
     "max_react_mins": float(os.getenv("MAX_REACT_MINS", 180.0)),
     "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 60.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 180.0)),
+    
 }
 
 # Dynamically builds the Telegram client config from the environment
