@@ -1,26 +1,19 @@
-# src/ai_controllers/config.py
+# config.py
 import json
 import os
 from dotenv import load_dotenv
 
-# Load any variables from a .env file into the environment
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path=dotenv_path)
-else:
-    load_dotenv()
+load_dotenv()
 
 def load_characters_config(file_path='characters.json'):
-    """Loads and validates the character definitions."""
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Critical: The '{file_path}' file was not found.")
+        raise FileNotFoundError(f"CRITICAL ERROR: The '{file_path}' file was not found.")
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except json.JSONDecodeError:
-        raise ValueError(f"Critical: The '{file_path}' file is not valid JSON.")
+        raise ValueError(f"CRITICAL ERROR: The '{file_path}' file is not valid JSON.")
 
-# --- Application-wide Configurations ---
 CHARACTERS_DATA = load_characters_config()
 
 APP_CONFIG = {
@@ -29,7 +22,7 @@ APP_CONFIG = {
     "source_channel": os.getenv("TELEGRAM_SOURCE_CHANNEL"),
     "destination_channel": os.getenv("TELEGRAM_DESTINATION_CHANNEL"),
     "slack_webhook_url": os.getenv("SLACK_WEBHOOK_URL"),
-    "data_dir": os.path.join(os.path.dirname(__file__), '..', '..', 'data'),
+    "data_dir": "bot_data",
     "chat_classify_model_path": "./trained_model",
     "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 2.0)),
     "max_initiate_hours": float(os.getenv("MAX_INITIATE_HOURS", 5.0)),
@@ -37,10 +30,10 @@ APP_CONFIG = {
     "max_react_mins": float(os.getenv("MAX_REACT_MINS", 180.0)),
     "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 60.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 180.0)),
-    
+    "min_convo_bots": 2,
+    "max_convo_bots": 10,
 }
 
-# Dynamically builds the Telegram client config from the environment
 TELEGRAM_USERS = {}
 for char in CHARACTERS_DATA.get("characters", []):
     username = char.get("telegram_user")
@@ -53,8 +46,7 @@ for char in CHARACTERS_DATA.get("characters", []):
         else:
             print(f"Warning: Missing API credentials in .env for Telegram user: {username}")
 
-# A startup check to ensure the bot can run.
 if not APP_CONFIG["openai_api_key"]:
-    raise ValueError("Critical: OPENAI_API_KEY is not set in the .env file.")
+    raise ValueError("CRITICAL ERROR: OPENAI_API_KEY is not set in the .env file.")
 if not TELEGRAM_USERS:
-    raise ValueError("Critical: No valid Telegram users configured. Check .env and characters.json.")
+    raise ValueError("CRITICAL ERROR: No valid Telegram users configured.")
