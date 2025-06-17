@@ -3,8 +3,10 @@ import asyncio
 import random
 import os
 from telethon import TelegramClient
+
+# --- CORRECTED IMPORTS ---
 from config.settings import APP_CONFIG, TELEGRAM_USERS
-from services.utils import StateManager
+from src.services.utils import StateManager
 
 class MessageSender:
     """
@@ -14,15 +16,16 @@ class MessageSender:
     def __init__(self):
         self.config = APP_CONFIG
         self.users_config = TELEGRAM_USERS
-        self.destination_channel = '@' + self.config['telegram_channel']
+        # Use single channel config if it exists
+        self.destination_channel = '@' + (self.config.get("telegram_channel") or self.config.get("destination_channel"))
         self.state_manager = StateManager()
         
-        # Create a dictionary of Telethon clients, one for each configured user.
+        # --- CORRECTED DICTIONARY COMPREHENSION ---
+        # This is the part that was likely causing the error.
+        # It correctly creates a client for each user.
         self.clients = {
             user: TelegramClient(
-                # The session file will be named after the username (e.g., JoiN9911.session)
-                user, 
-                os.path.join(self.config['data_dir'], user),
+                os.path.join(self.config['data_dir'], user), 
                 int(config["api_id"]), 
                 config["api_hash"]
             )
@@ -41,19 +44,15 @@ class MessageSender:
             return
 
         try:
-            # The 'async with' block handles connecting and gracefully disconnecting the client.
             async with client:
-                # Add a human-like "typing..." indicator before sending the message.
                 async with client.action(self.destination_channel, 'typing'):
                     await asyncio.sleep(random.uniform(3, 7))
                 await client.send_message(self.destination_channel, message_text)
             
-            # Use os.path.basename to get a clean session name (e.g., 'JoiN9911') for logging.
             session_name = os.path.basename(client.session.filename)
             print(f"Sender: Message sent via {session_name}: '{message_text[:50]}...'")
         except Exception as e:
             print(f"Sender: Error sending message: {e}. Re-queuing message for a later attempt.")
-            # If sending fails for any reason, add the message back to the queue so it isn't lost.
             self.state_manager.add_message_to_queue(message_obj)
 
     async def run(self):
@@ -61,21 +60,18 @@ class MessageSender:
         print("Message Sender process started...")
         while True:
             try:
-                # Atomically get the next message object from the central queue.
                 queued_item = self.state_manager.get_message_from_queue()
                 
                 if queued_item:
                     telegram_user = queued_item.get("telegram_user")
                     client_to_use = self.clients.get(telegram_user)
                     
-                    # If the message specifies a user not in our config, or no user, pick one at random.
                     if not client_to_use:
                         print(f"Sender: User '{telegram_user}' not found or not specified. Picking a random client.")
                         client_to_use = random.choice(list(self.clients.values()))
                     
                     await self._send_message(client_to_use, queued_item)
                     
-                    # Wait for a random duration before processing the next message to appear more human.
                     delay = random.uniform(
                         self.config['min_send_delay_secs'],
                         self.config['max_send_delay_secs']
@@ -83,15 +79,12 @@ class MessageSender:
                     print(f"Sender: Waiting {delay:.1f} seconds before checking queue again...")
                     await asyncio.sleep(delay)
                 else:
-                    # If the queue is empty, wait a shorter time before checking again.
                     await asyncio.sleep(15)
             
             except Exception as e:
                 print(f"Sender: CRITICAL ERROR in sender loop: {e}")
-                # Wait longer after a critical error before retrying to prevent rapid failure loops.
                 await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    # This block allows the script to be run directly from the command line.
     sender = MessageSender()
     asyncio.run(sender.run())

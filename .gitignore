@@ -1,5 +1,45 @@
+# .gitignore
+
+# --- Python ---
+# Ignore virtual environment folders
+/venv/
+
+# Ignore compiled Python files and cache folders
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- IDEs and Editors ---
+# Ignore VS Code specific files
+.vscode/
+
+# --- Operating System ---
+# Ignore macOS specific files
 .DS_Store
-.session
+
+# Ignore Windows specific files
+Thumbs.db
+
+# --- Application-Specific ---
+# Ignore all generated session files
+*.session
+*.session-journal
+
+# Ignore environment files containing secrets
 .env
-.venv/
-venv/
+
+# Ignore the data directory where logs and queues are stored.
+# This prevents committing sensitive user data or large log files.
+/data/
+
+# Ignore specific log or data files if you decide not to ignore the whole data folder
+# discussed_topic.json
+# message_queue.json
+# multiple_check.json
+# error.json
+# firebase-credentials.json
+
+# --- Other ---
+# Ignore any zip files or build artifacts
+*.zip
+*.tar.gz

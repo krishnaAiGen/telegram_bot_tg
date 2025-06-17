@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 project_root = os.path.join(os.path.dirname(__file__), '..')
 dotenv_path = os.path.join(project_root, '.env')
 if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path=dotenv_path)
+    load_dotenv(dotenv_path=dotenv_path, override=True)
 else:
     # Fallback for environments where the .env file might be in the current working directory
-    load_dotenv()
+    load_dotenv(override=True)
 
 def load_characters_config(file_path: str):
     """Loads and validates the character definitions from the JSON file."""
@@ -29,6 +29,8 @@ def load_characters_config(file_path: str):
 CHARACTERS_FILE_PATH = os.path.join(os.path.dirname(__file__), 'characters.json')
 CHARACTERS_DATA = load_characters_config(CHARACTERS_FILE_PATH)
 
+print(f"DEBUG: MIN_REACT_MINS from .env = {os.getenv('MIN_REACT_MINS')}")
+
 # A central dictionary for all application settings, sourced from the environment with sensible defaults.
 APP_CONFIG = {
     "openai_api_key": os.getenv("OPENAI_API_KEY"),
@@ -43,15 +45,15 @@ APP_CONFIG = {
     
     # Timing and behavior settings with defaults.
         
-    "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 2.0)),
+    "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 1.0)),
     "max_initiate_hours": float(os.getenv("MAX_INITIATE_HOURS", 5.0)),
-    "min_react_mins": float(os.getenv("MIN_REACT_MINS", 60.0)),
+    "min_react_mins": float(os.getenv("MIN_REACT_MINS", 10.0)),
     "max_react_mins": float(os.getenv("MAX_REACT_MINS", 180.0)),
-    "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 60.0)),
+    "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 10.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 180.0)),
     
     # --- MODIFIED LINES ---
-    "min_convo_bots": int(os.getenv("MIN_CONVO_BOTS", 2)),
+    "min_convo_bots": int(os.getenv("MIN_CONVO_BOTS", 1)),
     "max_convo_bots": int(os.getenv("MAX_CONVO_BOTS", 10)),
 }
 

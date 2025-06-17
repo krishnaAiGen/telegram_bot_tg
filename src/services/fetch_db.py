@@ -1,38 +1,31 @@
 # src/services/fetch_db.py
-from google.cloud.firestore import Query
+import asyncio
 import datetime
+from google.cloud.firestore import Query
+
+def _get_docs_sync(query):
+    """A synchronous helper function to execute a Firestore query and get results."""
+    return [doc.to_dict() for doc in query.stream()]
 
 async def get_last_message(collection_name: str, db) -> dict | None:
     """
-    Asynchronously fetches the single most recent message from a Firestore collection,
-    ordered by the 'date' field.
-
-    Args:
-        collection_name (str): The base name of the channel (e.g., 'my_channel').
-        db: An initialized Firestore database client instance.
-
-    Returns:
-        The message data as a dictionary, or None if the collection is empty.
+    Asynchronously fetches the single most recent message from a Firestore collection.
     """
-    # Sanitize the name to create the final collection ID, preserving original logic.
-    sanitized_name = collection_name.lstrip('@')
-    final_name = f"conversation_ai_{sanitized_name}"
+    # Use the single channel config if it exists
+    final_name = f"conversation_ai_{collection_name}"
     collection_ref = db.collection(final_name)
     
-    # Construct the query to get 1 document, ordered by date descending.
-    # The .stream() method creates an asynchronous iterator.
-    docs_stream = collection_ref.order_by("date", direction=Query.DESCENDING).limit(1).stream()
+    query = collection_ref.order_by("date", direction=Query.DESCENDING).limit(1)
     
-    # Use the 'async for' syntax to iterate over the asynchronous results.
-    messages = [doc.to_dict() async for doc in docs_stream]
+    # --- CORRECTED LINE ---
+    # Run the synchronous database call in a background thread
+    messages = await asyncio.to_thread(_get_docs_sync, query)
     
     if not messages:
         return None
         
     last_message = messages[0]
     
-    # CRITICAL FIX: Ensure the datetime object from Firestore is timezone-aware (UTC).
-    # This prevents crashes when comparing it with timezone-aware datetimes from elsewhere.
     if isinstance(last_message.get('date'), datetime.datetime):
          last_message['date'] = last_message['date'].replace(tzinfo=datetime.timezone.utc)
     
@@ -41,29 +34,17 @@ async def get_last_message(collection_name: str, db) -> dict | None:
 async def get_last_100_message_texts(collection_name: str, db) -> list[str]:
     """
     Asynchronously fetches the text content of the last 100 messages.
-    This is used to provide historical context for generating new conversation topics.
-
-    Args:
-        collection_name (str): The base name of the channel.
-        db: An initialized Firestore database client instance.
-
-    Returns:
-        A list of strings, where each string is the text of a message.
     """
-    sanitized_name = collection_name.lstrip('@')
-    final_name = f"conversation_ai_{sanitized_name}"
+    final_name = f"conversation_ai_{collection_name}"
     collection_ref = db.collection(final_name)
     
-    # Query for the last 100 documents ordered by date.
-    docs_stream = (
-        collection_ref.order_by("date", direction=Query.DESCENDING)
-        .limit(100)
-        .stream()
-    )
+    query = collection_ref.order_by("date", direction=Query.DESCENDING).limit(100)
     
-    # Use a concise and efficient list comprehension with 'async for' to extract
-    # the 'text' field from each document, with a fallback to an empty string.
+    # --- CORRECTED LINE ---
+    # Run the synchronous database call in a background thread
+    docs = await asyncio.to_thread(_get_docs_sync, query)
+    
     message_texts = [
-        doc.to_dict().get('text', '') async for doc in docs_stream if 'text' in doc.to_dict()
+        doc.get('text', '') for doc in docs if 'text' in doc
     ]
     return message_texts
