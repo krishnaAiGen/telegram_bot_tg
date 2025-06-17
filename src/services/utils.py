@@ -1,11 +1,9 @@
 # src/services/utils.py
 import json
 import os
-import pickle
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta # Added timedelta here
 import pytz
 
-# Import the centralized config object
 from config.settings import APP_CONFIG
 
 class StateManager:
@@ -14,25 +12,19 @@ class StateManager:
         self.data_dir = APP_CONFIG['data_dir']
         os.makedirs(self.data_dir, exist_ok=True)
         
-        self.discussed_topics_file = os.path.join(self.data_dir, 'discussed_topic.json')
-        self.message_queue_file = os.path.join(self.data_dir, 'message_queue.json')
-        self.reaction_log_file = os.path.join(self.data_dir, 'multiple_check.json') # This is the file we'll use
+        self.brain_input_queue_file = os.path.join(self.data_dir, 'brain_input_queue.json')
+        self.processed_log_file = os.path.join(self.data_dir, 'processed_log.json')
+        self.sender_queue_file = os.path.join(self.data_dir, 'message_queue.json')
         self.error_file = os.path.join(self.data_dir, 'error.json')
-        self.assignments_file = os.path.join(self.data_dir, 'persona_assignments.json')
-        self.memory_file = os.path.join(self.data_dir, 'conversation_memory.json')
+        self.discussed_topics_file = os.path.join(self.data_dir, 'discussed_topic.json')
         self.initiation_schedule_file = os.path.join(self.data_dir, 'time_persona.json')
-        self.random_talk_schedule_file = os.path.join(self.data_dir, 'random_conversation_time.json')
-        self.clean_bot_state_file = os.path.join(self.data_dir, 'clean_bot.json')
         
-        self._init_json_file(self.discussed_topics_file, {})
-        self._init_json_file(self.message_queue_file, [])
-        self._init_json_file(self.reaction_log_file, {}) # Initializes the reaction log
+        self._init_json_file(self.brain_input_queue_file, [])
+        self._init_json_file(self.processed_log_file, {})
+        self._init_json_file(self.sender_queue_file, [])
         self._init_json_file(self.error_file, {})
-        self._init_json_file(self.assignments_file, {})
-        self._init_json_file(self.memory_file, {})
+        self._init_json_file(self.discussed_topics_file, {})
         self._init_json_file(self.initiation_schedule_file, {})
-        self._init_json_file(self.random_talk_schedule_file, [])
-        self._init_json_file(self.clean_bot_state_file, {"counter": 10})
 
     def _init_json_file(self, file_path, default_content):
         if not os.path.exists(file_path):
@@ -43,39 +35,48 @@ class StateManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
-            if 'queue' in file_path or 'time' in file_path or 'random' in file_path:
-                return []
-            return {}
+            return [] if 'queue' in file_path else {}
 
     def save_json(self, file_path, data):
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
-            
-    # --- REACTION LOGGING METHODS ---
 
-    # --- NEW METHOD ---
-    def has_reacted(self, message_text: str) -> bool:
-        """Checks if the bot has already reacted to this exact message text."""
-        reaction_log = self.load_json(self.reaction_log_file)
-        return message_text in reaction_log
+    def add_message_to_brain_queue(self, message_data: dict):
+        queue = self.load_json(self.brain_input_queue_file)
+        queue.append(message_data)
+        self.save_json(self.brain_input_queue_file, queue)
 
-    # --- NEW METHOD ---
-    def log_reaction(self, message_text: str):
-        """Logs that the bot has reacted to a message to prevent duplicates."""
-        reaction_log = self.load_json(self.reaction_log_file)
-        # Add the new reaction with a timestamp
-        reaction_log[message_text] = get_ist_time()
-        
-        # To prevent the log from growing forever, keep only the last 200 reactions
-        if len(reaction_log) > 200:
-            # Sort items by timestamp and keep the most recent 200
-            sorted_items = sorted(reaction_log.items(), key=lambda item: item[1], reverse=True)
-            reaction_log = dict(sorted_items[:200])
+    def get_message_from_brain_queue(self) -> dict | None:
+        queue = self.load_json(self.brain_input_queue_file)
+        if not queue: return None
+        message = queue.pop(0)
+        self.save_json(self.brain_input_queue_file, queue)
+        return message
 
-        self.save_json(self.reaction_log_file, reaction_log)
+    def has_processed(self, message_id: int) -> bool:
+        log = self.load_json(self.processed_log_file)
+        return str(message_id) in log
 
-    # --- END OF NEW METHODS ---
+    def log_processed(self, message_id: int):
+        log = self.load_json(self.processed_log_file)
+        log[str(message_id)] = datetime.now(timezone.utc).isoformat()
+        if len(log) > 500:
+            sorted_items = sorted(log.items(), key=lambda item: item[1], reverse=True)
+            log = dict(sorted_items[:500])
+        self.save_json(self.processed_log_file, log)
 
+    def add_message_to_sender_queue(self, message: dict):
+        queue = self.load_json(self.sender_queue_file)
+        queue.append(message)
+        self.save_json(self.sender_queue_file, queue)
+
+    def get_message_from_sender_queue(self) -> dict | None:
+        queue = self.load_json(self.sender_queue_file)
+        if not queue: return None
+        message = queue.pop(0)
+        self.save_json(self.sender_queue_file, queue)
+        return message
+    
     def save_initiation_schedule(self, conversation_dict: dict):
         schedule = {}
         now = datetime.now(pytz.timezone('Asia/Kolkata'))
