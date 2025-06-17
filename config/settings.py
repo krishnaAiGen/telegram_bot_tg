@@ -59,14 +59,14 @@ TELEGRAM_USERS = {}
 for char in CHARACTERS_DATA.get("characters", []):
     username = char.get("telegram_user")
     if username:
-        env_username = username.upper().replace('-', '_') # Sanitize for env var conventions
-        api_id = os.getenv(f"TELEGRAM_USER_{env_username}_API_ID")
-        api_hash = os.getenv(f"TELEGRAM_USER_{env_username}_API_HASH")
+        # No more .upper(), just use the name directly
+        env_var_prefix = f"TELEGRAM_USER_{username}_"
+        api_id = os.getenv(f"{env_var_prefix}API_ID")
+        api_hash = os.getenv(f"{env_var_prefix}API_HASH")
         if api_id and api_hash:
             TELEGRAM_USERS[username] = {"api_id": api_id, "api_hash": api_hash}
         else:
-            print(f"Warning: Missing API credentials in .env for Telegram user: {username} (looked for TELEGRAM_USER_{env_username}_API_ID/HASH)")
-
+            print(f"Warning: Missing API credentials in .env for Telegram user: {username} (looked for {env_var_prefix}API_ID/HASH)")
 # --- Startup Validation ---
 # The application will fail to start if these critical configurations are missing.
 if not APP_CONFIG["openai_api_key"]:

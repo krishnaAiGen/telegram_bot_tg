@@ -22,6 +22,7 @@ class MessageSender:
             user: TelegramClient(
                 # The session file will be named after the username (e.g., JoiN9911.session)
                 user, 
+                os.path.join(self.config['data_dir'], user),
                 int(config["api_id"]), 
                 config["api_hash"]
             )

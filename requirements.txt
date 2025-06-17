@@ -1,21 +1,17 @@
 # requirements.txt
 
 # --- Core Application & Async ---
-python-dotenv
-aiohttp
-asyncio
-
-# --- AI & Machine Learning ---
-torch
-transformers
-sentence-transformers
-numpy
+aiohttp==3.9.5
+python-dotenv==1.0.1
 
 # --- Data Handling & Utilities ---
-pandas
-pytz
+pytz==2024.1
 
 # --- Google Cloud & Telegram ---
-google-cloud-firestore
-firebase-admin
-telethon
+firebase-admin==6.5.0
+google-api-core==2.19.0
+google-auth==2.29.0
+google-cloud-core==2.4.1
+google-cloud-firestore==2.16.0
+googleapis-common-protos==1.63.1
+telethon==1.34.0
