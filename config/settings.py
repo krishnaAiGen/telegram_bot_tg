@@ -41,17 +41,19 @@ APP_CONFIG = {
     
     # The data directory will be in the project root.
     "data_dir": os.path.join(project_root, 'data'),
-    "chat_classify_model_path": "./trained_model", # Assuming this is relative to where the script is run.
     
     # Timing and behavior settings with defaults.
+        
     "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 2.0)),
     "max_initiate_hours": float(os.getenv("MAX_INITIATE_HOURS", 5.0)),
     "min_react_mins": float(os.getenv("MIN_REACT_MINS", 60.0)),
     "max_react_mins": float(os.getenv("MAX_REACT_MINS", 180.0)),
     "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 60.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 180.0)),
-    "min_convo_bots": 2,
-    "max_convo_bots": 10,
+    
+    # --- MODIFIED LINES ---
+    "min_convo_bots": int(os.getenv("MIN_CONVO_BOTS", 2)),
+    "max_convo_bots": int(os.getenv("MAX_CONVO_BOTS", 10)),
 }
 
 # Dynamically build the Telegram client configuration from .env based on characters.json
