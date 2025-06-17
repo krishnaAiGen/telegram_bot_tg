@@ -24,7 +24,7 @@ Thumbs.db
 # Ignore all generated session files
 *.session
 *.session-journal
-
+.session
 # Ignore environment files containing secrets
 .env
 
