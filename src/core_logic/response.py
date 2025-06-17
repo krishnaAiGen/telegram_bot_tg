@@ -11,6 +11,7 @@ from firebase_admin import credentials, firestore
 # Import from the new, structured locations
 from config.settings import APP_CONFIG
 from services.utils import StateManager
+
 from services.fetch_db import get_last_message
 from services.openai_chat import get_llm_response, is_content_offensive
 from services.slack_bot import post_error_to_slack

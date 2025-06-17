@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 
 # Import the refactored classes and functions it depends on
 from services.utils import StateManager
+from config.settings import APP_CONFIG
+
 from core_logic.llm_personas import PersonaManager
 from services.openai_chat import get_llm_response, is_content_offensive
 

@@ -23,8 +23,10 @@ class DataIngestor:
         user_key = list(TELEGRAM_USERS.keys())[0]
         user_config = TELEGRAM_USERS[user_key]
         
+        session_path = os.path.join(self.config['data_dir'], user_key)
+
         # The Telethon client needs the API ID as an integer.
-        self.client = TelegramClient(user_key, int(user_config['api_id']), user_config['api_hash'])
+        self.client = TelegramClient(session_path, int(user_config['api_id']), user_config['api_hash'])
         
         # Initialize Firebase with a unique app name to prevent conflicts with other processes.
         if not firebase_admin._apps:

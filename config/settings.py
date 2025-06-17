@@ -36,6 +36,8 @@ APP_CONFIG = {
     "source_channel": os.getenv("TELEGRAM_SOURCE_CHANNEL"),
     "destination_channel": os.getenv("TELEGRAM_DESTINATION_CHANNEL"),
     "slack_webhook_url": os.getenv("SLACK_WEBHOOK_URL"),
+    "known_bot_ids": [int(bot_id) for bot_id in os.getenv("KNOWN_BOT_IDS", "").split(',') if bot_id.isdigit()],
+
     
     # The data directory will be in the project root.
     "data_dir": os.path.join(project_root, 'data'),
