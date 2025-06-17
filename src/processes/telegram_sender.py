@@ -14,7 +14,7 @@ class MessageSender:
     def __init__(self):
         self.config = APP_CONFIG
         self.users_config = TELEGRAM_USERS
-        self.destination_channel = '@' + self.config['destination_channel']
+        self.destination_channel = '@' + self.config['telegram_channel']
         self.state_manager = StateManager()
         
         # Create a dictionary of Telethon clients, one for each configured user.

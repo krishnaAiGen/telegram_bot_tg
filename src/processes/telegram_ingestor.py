@@ -15,7 +15,7 @@ class DataIngestor:
     """
     def __init__(self):
         self.config = APP_CONFIG
-        self.source_channel = '@' + self.config['source_channel']
+        self.source_channel = '@' + self.config['telegram_channel']
         # This flag file is a simple mechanism to ensure the full history is only fetched once.
         self.flag_file = os.path.join(self.config['data_dir'], "fetch_and_save_done.txt")
         

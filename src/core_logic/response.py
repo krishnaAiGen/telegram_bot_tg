@@ -127,10 +127,17 @@ You are a master AI assistant that embodies different expert personas within a c
         print("Telegram Bot brain starting main loop...")
         while True:
             try:
-                last_message = await get_last_message(self.config['source_channel'], self.db)
+                last_message = await get_last_message(self.config['telegram_channel'], self.db)
                 initiate_now, react_now = False, False
                 
                 if last_message and last_message.get('date'):
+                    
+                    sender_id = last_message.get('sender_id')
+                    if sender_id in self.config.get('known_bot_ids', []):
+                        print(f"Last message was from our own bot (ID: {sender_id}). Ignoring.")
+                        # Force a sleep and restart the loop to wait for a real user message
+                        await asyncio.sleep(random.uniform(5 * 60, 15 * 60))
+                        continue
                     time_since = datetime.now(timezone.utc) - last_message['date']
                     init_thresh = timedelta(hours=random.uniform(self.config['min_initiate_hours'], self.config['max_initiate_hours']))
                     react_thresh = timedelta(minutes=random.uniform(self.config['min_react_mins'], self.config['max_react_mins']))

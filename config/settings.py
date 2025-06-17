@@ -33,8 +33,7 @@ CHARACTERS_DATA = load_characters_config(CHARACTERS_FILE_PATH)
 APP_CONFIG = {
     "openai_api_key": os.getenv("OPENAI_API_KEY"),
     "firebase_cred_path": os.getenv("FIREBASE_CRED_PATH"),
-    "source_channel": os.getenv("TELEGRAM_SOURCE_CHANNEL"),
-    "destination_channel": os.getenv("TELEGRAM_DESTINATION_CHANNEL"),
+    "telegram_channel": os.getenv("TELEGRAM_CHANNEL"),
     "slack_webhook_url": os.getenv("SLACK_WEBHOOK_URL"),
     "known_bot_ids": [int(bot_id) for bot_id in os.getenv("KNOWN_BOT_IDS", "").split(',') if bot_id.isdigit()],
 
