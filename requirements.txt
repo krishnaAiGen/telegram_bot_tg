@@ -1,0 +1,21 @@
+# requirements.txt
+
+# --- Core Application & Async ---
+python-dotenv
+aiohttp
+asyncio
+
+# --- AI & Machine Learning ---
+torch
+transformers
+sentence-transformers
+numpy
+
+# --- Data Handling & Utilities ---
+pandas
+pytz
+
+# --- Google Cloud & Telegram ---
+google-cloud-firestore
+firebase-admin
+telethon
