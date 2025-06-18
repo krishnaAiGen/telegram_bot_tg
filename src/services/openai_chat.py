@@ -12,9 +12,11 @@ async def get_llm_response(content: str, model: str = "gpt-4", max_tokens: int =
     headers = {"Authorization": f"Bearer {API_KEY}"}
     payload = {"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens}
     
+    
+    timeout = aiohttp.ClientTimeout(total=90) 
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(CHAT_API_URL, headers=headers, json=payload, timeout=90) as response:
+            async with session.post(CHAT_API_URL, headers=headers, json=payload, timeout=timeout) as response:
                 response.raise_for_status()
                 result = await response.json()
                 return result['choices'][0]['message']['content'].strip()
@@ -29,9 +31,10 @@ async def is_content_offensive(text_to_check: str) -> bool:
     headers = {"Authorization": f"Bearer {API_KEY}"}
     payload = {"input": text_to_check}
     
+    timeout = aiohttp.ClientTimeout(total=10) 
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(MODERATION_API_URL, headers=headers, json=payload, timeout=10) as response:
+            async with session.post(MODERATION_API_URL, headers=headers, json=payload, timeout=timeout) as response:
                 response.raise_for_status()
                 result = await response.json()
                 return result["results"][0]["flagged"]
