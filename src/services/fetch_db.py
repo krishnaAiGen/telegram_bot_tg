@@ -21,15 +21,26 @@ def save_message_to_db(collection_name: str, message, db):
 def _get_docs_sync(query):
     return [doc.to_dict() for doc in query.stream()]
 
-async def get_last_message(collection_name: str, db) -> dict | None:
-    collection_ref = db.collection(f"conversation_ai_{collection_name}")
-    query = collection_ref.order_by("date", direction=Query.DESCENDING).limit(1)
-    messages = await asyncio.to_thread(_get_docs_sync, query)
-    if not messages: return None
-    last_message = messages[0]
-    if isinstance(last_message.get('date'), datetime.datetime):
-         last_message['date'] = last_message['date'].replace(tzinfo=datetime.timezone.utc)
-    return last_message
+async def get_last_n_messages_as_text(group_id: str, n: int, db) -> str:
+    """Fetches the last N messages and formats them into a simple text block."""
+    collection_ref = db.collection(f"conversation_ai_{group_id}")
+    query = collection_ref.order_by("date", direction=Query.DESCENDING).limit(n)
+    docs = await asyncio.to_thread(_get_docs_sync, query)
+    
+    if not docs:
+        return "No recent messages."
+        
+    # Reverse to get chronological order
+    docs.reverse()
+    
+    formatted_history = []
+    for doc in docs:
+        # In a real scenario, you might fetch user names, but for the LLM, this is enough
+        sender = doc.get('sender_id', 'User')
+        text = doc.get('text', '')
+        formatted_history.append(f"User {sender}: {text}")
+        
+    return "\n".join(formatted_history)
 
 async def get_last_100_message_texts(collection_name: str, db) -> list[str]:
     collection_ref = db.collection(f"conversation_ai_{collection_name}")

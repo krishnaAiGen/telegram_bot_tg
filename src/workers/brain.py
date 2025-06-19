@@ -9,6 +9,7 @@ from src.services.fetch_db import save_message_to_db
 
 
 
+
 async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     print("[BRAIN] Worker started. Waiting for messages...")
     bot_state = state_manager.load_bot_state()
@@ -46,7 +47,7 @@ async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, 
                         print(f"[BRAIN] Probability gate: Rolled {roll:.2f}, which is <= {response_rate}. Proceeding with reply.")
                 
                 # If we pass the gate (or if the rate is 1.0), proceed as normal.
-                await handle_reaction(message, sender_queue, persona_manager, state_manager)
+                await handle_reaction(message, sender_queue, persona_manager, state_manager, db)
                 state_manager.log_processed(message.id)
                 bot_state["last_activity_time"] = time.time()
                 state_manager.save_bot_state(bot_state)

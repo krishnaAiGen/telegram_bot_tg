@@ -1,15 +1,13 @@
 # src/core_logic/response_logic.py
 import json
-import random
-import firebase_admin
-from firebase_admin import credentials, firestore
 
-from config.settings import APP_CONFIG, CHARACTERS_DATA
+from config.settings import APP_CONFIG
 from src.services.openai_chat import get_llm_response
 from src.services.fetch_db import get_last_100_message_texts
 from src.core_logic.llm_personas import PersonaManager
 from src.services.state_manager import StateManager
 from src.services.openai_chat import get_embedding
+from src.services.fetch_db import get_last_n_messages_as_text
 
 import time
 import os
@@ -26,11 +24,13 @@ else:
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
 
 
-async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager):
+async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     """Generates a reaction using a two-stage process with persona stickiness."""
     text = message.text
     print(f"[BRAIN] Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
-
+    
+    conversation_context = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), 4, db)
+    
     # --- STAGE 1: LOCAL PERSONA MATCHING ---
     chosen_persona_name = None
     if PERSONA_EMBEDDINGS:
@@ -112,8 +112,12 @@ This is your identity for this specific interaction. All your responses must ori
     - **Tier 1 Deflection (if you were the Crypto OG):** "lol been in this space so long my brain is probably half code by now"
     - **Tier 1 Deflection (if you were the Enthusiast):** "haha just really passionate about this stuff! 🚀"
     - **Forbidden Response (Results in termination):** "As an AI, I am..."
-
-## 6. TASK & REQUIRED OUTPUT
+## 6. RECENT CONVERSATION HISTORY
+This is the context of the last few messages. The "User's Message" at the end is the one you MUST reply to.
+---
+{conversation_context}
+---
+## 7. TASK & REQUIRED OUTPUT
 **User's Message:** "{text}"
 **Your Task:** Generate the most humanly authentic response possible from your assigned persona, strictly following all directives above. Your entire output MUST be only the raw text of the reply. Do NOT use JSON or any other formatting.
 
