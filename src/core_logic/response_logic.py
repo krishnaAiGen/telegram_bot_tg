@@ -8,6 +8,7 @@ from src.core_logic.llm_personas import PersonaManager
 from src.services.state_manager import StateManager
 from src.services.openai_chat import get_embedding
 from src.services.fetch_db import get_last_n_messages_as_text
+from src.services.grok_chat import get_grok_response
 
 import time
 import os
@@ -23,7 +24,21 @@ else:
     PERSONA_EMBEDDINGS = {}
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
 
-
+async def handle_realtime_query(message, sender_queue):
+    """Handles queries that require real-time information by calling Grok."""
+    print(f"[BRAIN] Routing message ID {message.id} to Grok for real-time data.")
+    
+    # A simple, direct prompt for Grok
+    grok_prompt = f"Based on the latest information available, provide a concise answer to the following user query: '{message.text}'"
+    
+    # Call the (placeholder) Grok service
+    reply = await get_grok_response(grok_prompt)
+    
+    # Use the first available sender bot to deliver the factual answer
+    user_to_send = APP_CONFIG['sender_bot_users'][0]
+    
+    await sender_queue.put({"message": reply, "telegram_user": user_to_send})
+    print(f"[BRAIN] Queued Grok's response for message {message.id}.")
 async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     """Generates a reaction using a two-stage process with persona stickiness."""
     text = message.text
