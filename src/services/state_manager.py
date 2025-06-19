@@ -14,7 +14,7 @@ class StateManager:
         self.processed_log_file = os.path.join(self.data_dir, 'processed_log.json')
         self.initiated_topics_file = os.path.join(self.data_dir, 'initiated_topics.json')
         
-        self._init_json_file(self.processed_log_file, {})
+        self.save_json(self.processed_log_file, {}) 
         self._init_json_file(self.initiated_topics_file, {})
 
     def _init_json_file(self, file_path, default_content):
