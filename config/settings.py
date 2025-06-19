@@ -20,16 +20,39 @@ CHARACTERS_FILE_PATH = os.path.join(os.path.dirname(__file__), 'characters.json'
 CHARACTERS_DATA = load_characters_config(CHARACTERS_FILE_PATH)
 
 APP_CONFIG = {
+    # Core API Configuration
     "openai_api_key": os.getenv("OPENAI_API_KEY"),
     "firebase_cred_path": os.getenv("FIREBASE_CRED_PATH"),
     "telegram_channel": os.getenv("TELEGRAM_CHANNEL"),
     "data_dir": os.path.join(project_root, 'data'),
-    "ingestor_bot_user": os.getenv("INGESTOR_BOT_USER"),
-    "sender_bot_users": [user.strip() for user in os.getenv("SENDER_BOT_USERS", "").split(',') if user.strip()],
+    
+    # Bot Account Configuration
+    "ingestor_bot_user": os.getenv("INGESTOR_BOT_USER", "trial_account"),
+    "sender_bot_users": [user.strip() for user in os.getenv("SENDER_BOT_USERS", "trial_account").split(',') if user.strip()],
     "known_bot_ids": [int(bot_id) for bot_id in os.getenv("KNOWN_BOT_IDS", "").split(',') if bot_id.isdigit()],
-    "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 1.0)),
-    "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 5.0)),
-    "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 15.0)),
+    
+    # Timing Configuration - Response Behavior
+    "min_response_delay_secs": float(os.getenv("MIN_REACT_MINS", 0.1)) * 60,    # Convert MIN_REACT_MINS to seconds
+    "max_response_delay_secs": float(os.getenv("MAX_REACT_MINS", 1.0)) * 60,    # Convert MAX_REACT_MINS to seconds
+    "response_probability": float(os.getenv("RESPONSE_PROBABILITY", 0.3)),      # Default 30% chance to respond
+    
+    # Timing Configuration - Sending Behavior
+    "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 0.0)),        # From your .env
+    "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 60.0)),       # From your .env
+    
+    # Timing Configuration - Initiation Behavior
+    "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 0.0)),          # From your .env
+    "max_initiate_hours": float(os.getenv("MAX_INITIATE_HOURS", 0.5)),          # From your .env  
+    "initiation_check_interval_mins": float(os.getenv("MAX_INITIATE_HOURS", 0.5)) * 60,  # Convert to minutes
+    
+    # Memory Configuration
+    "max_recent_messages": int(os.getenv("MAX_RECENT_MESSAGES", 1000)),             # Max messages to remember
+    "max_sent_messages_cache": int(os.getenv("MAX_SENT_MESSAGES_CACHE", 20)),       # Max sent messages to track
+    
+    # OpenAI Configuration
+    "openai_model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),                       # OpenAI model to use
+    "openai_max_tokens": int(os.getenv("OPENAI_MAX_TOKENS", 150)),                  # Max tokens per response
+    "openai_temperature": float(os.getenv("OPENAI_TEMPERATURE", 0.8)),              # Response creativity (0.0-2.0)
 }
 
 TELEGRAM_USERS = {}
