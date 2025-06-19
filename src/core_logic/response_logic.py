@@ -11,6 +11,7 @@ from src.core_logic.llm_personas import PersonaManager
 from src.services.state_manager import StateManager
 from src.services.openai_chat import get_embedding
 
+import time
 import os
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -25,10 +26,10 @@ else:
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
 
 
-async def handle_reaction(message, sender_queue, persona_manager: PersonaManager):
-    """Generates a reaction using a two-stage process: local matching then focused LLM call."""
+async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager):
+    """Generates a reaction using a two-stage process with persona stickiness."""
     text = message.text
-    print(f"Brain: Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
+    print(f"[BRAIN] Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
 
     # --- STAGE 1: LOCAL PERSONA MATCHING ---
     chosen_persona_name = None
@@ -40,24 +41,35 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
             persona_names = list(PERSONA_EMBEDDINGS.keys())
             persona_vectors = list(PERSONA_EMBEDDINGS.values())
             
-            # Calculate similarity scores
             user_vector = np.array(user_embedding).reshape(1, -1)
-            scores = cosine_similarity(user_vector, np.array(persona_vectors))
-            
-            # Get the best match
+            scores = cosine_similarity(user_vector, np.array(persona_vectors))[0]
+
+            # --- CLEANED UP: Persona Stickiness Logic ---
+            last_persona_info = state_manager.get_last_persona_info()
+            last_persona_name = last_persona_info.get("name")
+            last_persona_time = last_persona_info.get("timestamp", 0)
+
+            if last_persona_name and (time.time() - last_persona_time < 180): # 3 minute window
+                try:
+                    idx = persona_names.index(last_persona_name)
+                    bonus = 1.15 # 15% bonus to make it more impactful
+                    print(f"[BRAIN] Applying stickiness bonus of {bonus} to '{last_persona_name}'")
+                    scores[idx] *= bonus
+                except ValueError:
+                    print(f"[BRAIN] Warning: Last used persona '{last_persona_name}' not found in embeddings.")
+                    pass
+
             best_match_index = np.argmax(scores)
             chosen_persona_name = persona_names[best_match_index]
-            print(f"[BRAIN] Best local match found: '{chosen_persona_name}' with score {scores[0][best_match_index]:.4f}")
+            print(f"[BRAIN] Best local match found: '{chosen_persona_name}' with score {scores[best_match_index]:.4f}")
     
-    # Fallback if local matching fails or is disabled
     if not chosen_persona_name:
-        
         random_persona = persona_manager.get_random_persona()
         if not random_persona:
             print("ERROR: Could not get a random persona. Aborting reaction.")
-        return # Exit the function safely
-
-        print(f"[BRAIN] Local matching failed or disabled. Falling back to random persona: '{chosen_persona_name}'")
+            return
+        chosen_persona_name = random_persona['persona_name']
+        print(f"[BRAIN] Local matching failed. Falling back to random persona: '{chosen_persona_name}'")
 
     # --- STAGE 2: FOCUSED LLM CALL ---
     chosen_persona = persona_manager.get_persona_by_name(chosen_persona_name)
@@ -65,13 +77,12 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
         print(f"ERROR: Could not find full profile for persona '{chosen_persona_name}'")
         return
 
-    # Create the single persona profile text
     persona_profile = (
-        f"Role: {chosen_persona.get('role', '')}. "
-        f"Expertise: {', '.join(chosen_persona.get('expertise', []))}. "
-        f"Traits: {', '.join(chosen_persona.get('key_traits', []))}. "
-        f"Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
-    )
+    f"Role: {chosen_persona.get('role', '')}. "
+    f"Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}. "
+    f"Expertise: {', '.join(chosen_persona.get('expertise', []))}. "
+    f"Traits: {', '.join(chosen_persona.get('key_traits', []))}.")
+
 
     super_prompt = f"""
 # SYSTEM PROMPT
@@ -110,13 +121,15 @@ This is your identity for this specific interaction. All your responses must ori
 YOUR REPLY (RAW TEXT ONLY):
 """
 
-    reply = await get_llm_response(super_prompt, max_tokens=60) # Generate only the reply
+    reply = await get_llm_response(super_prompt, max_tokens=60)
 
     if "Error:" in reply:
         print(f"Error getting LLM response: {reply}")
         return
-
-    # No JSON parsing needed anymore
+    
+    # --- CLEANED UP: Update the state with the chosen persona ---
+    state_manager.update_last_persona_info(chosen_persona_name)
+    print(f"[BRAIN] Updated last used persona to '{chosen_persona_name}'")
     
     user_to_send = chosen_persona.get("telegram_user") or APP_CONFIG['sender_bot_users'][0]
     

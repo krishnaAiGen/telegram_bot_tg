@@ -29,6 +29,7 @@ async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, 
                 continue
             
             if not state_manager.has_processed(message.id):
+
                 # --- NEW: PROBABILITY GATE ---
                 response_rate = APP_CONFIG.get("random_response_rate", 1.0)
                 
@@ -45,7 +46,7 @@ async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, 
                         print(f"[BRAIN] Probability gate: Rolled {roll:.2f}, which is <= {response_rate}. Proceeding with reply.")
                 
                 # If we pass the gate (or if the rate is 1.0), proceed as normal.
-                await handle_reaction(message, sender_queue, persona_manager)
+                await handle_reaction(message, sender_queue, persona_manager, state_manager)
                 state_manager.log_processed(message.id)
                 bot_state["last_activity_time"] = time.time()
                 state_manager.save_bot_state(bot_state)

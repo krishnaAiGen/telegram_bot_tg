@@ -2,26 +2,27 @@
 import json
 import os
 import time
-
 from datetime import datetime, timezone
 
 from config.settings import APP_CONFIG
 
 class StateManager:
-    """Manages persistent file-based state like logs."""
+    """Manages all persistent file-based state for the application."""
     def __init__(self):
         self.data_dir = APP_CONFIG['data_dir']
         os.makedirs(self.data_dir, exist_ok=True)
         
         self.processed_log_file = os.path.join(self.data_dir, 'processed_log.json')
         self.initiated_topics_file = os.path.join(self.data_dir, 'initiated_topics.json')
-        
         self.bot_state_file = os.path.join(self.data_dir, 'bot_state.json')
-          
-        self.save_json(self.processed_log_file, {}) 
+        
+        self.save_json(self.processed_log_file, {}) # Always start with a fresh reaction memory
         self._init_json_file(self.initiated_topics_file, {})
-        self._init_json_file(self.bot_state_file, {"last_activity_time": time.time()})
-
+        # Initialize bot state with defaults if the file doesn't exist
+        self._init_json_file(self.bot_state_file, {
+            "last_activity_time": time.time(),
+            "last_persona_info": {"name": None, "timestamp": 0}
+        })
 
     def _init_json_file(self, file_path, default_content):
         if not os.path.exists(file_path):
@@ -32,23 +33,37 @@ class StateManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
+            # Return a default structure if file is corrupt or not found
+            if 'log' in file_path or 'topics' in file_path:
+                return {}
+            if 'state' in file_path:
+                return {"last_activity_time": time.time(), "last_persona_info": {"name": None, "timestamp": 0}}
             return {}
 
     def save_json(self, file_path, data):
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
-            
+
+    # --- Methods for Core Bot State ---
     def load_bot_state(self) -> dict:
-        """Loads the bot's core state, providing defaults if missing."""
-        state = self.load_json(self.bot_state_file)
-        if "last_activity_time" not in state:
-            state["last_activity_time"] = time.time()
-        return state
+        return self.load_json(self.bot_state_file)
 
     def save_bot_state(self, state: dict):
-        """Saves the bot's core state to the file."""
         self.save_json(self.bot_state_file, state)
 
+    # --- NEW: Methods specifically for Persona Stickiness ---
+    def get_last_persona_info(self) -> dict:
+        """Safely gets the last used persona's info from the state file."""
+        state = self.load_bot_state()
+        return state.get("last_persona_info", {"name": None, "timestamp": 0})
+
+    def update_last_persona_info(self, persona_name: str):
+        """Updates the state file with the latest persona used."""
+        state = self.load_bot_state()
+        state["last_persona_info"] = {"name": persona_name, "timestamp": time.time()}
+        self.save_bot_state(state)
+
+    # --- Methods for Message and Topic Logs ---
     def has_processed(self, message_id: int) -> bool:
         log = self.load_json(self.processed_log_file)
         return str(message_id) in log
@@ -57,20 +72,16 @@ class StateManager:
         log = self.load_json(self.processed_log_file)
         log[str(message_id)] = datetime.now(timezone.utc).isoformat()
         if len(log) > 500:
-            sorted_items = sorted(log.items(), key=lambda item: item[1], reverse=True)
-            log = dict(sorted_items[:400])
+            log = dict(list(log.items())[-400:])
         self.save_json(self.processed_log_file, log)
 
     def log_initiated_topic(self, topic: str):
-        """Logs a topic that the bot has initiated."""
         topics = self.load_json(self.initiated_topics_file)
         topics[topic] = datetime.now(timezone.utc).isoformat()
         if len(topics) > 50:
-            sorted_topics = sorted(topics.items(), key=lambda item: item[1], reverse=True)
-            topics = dict(sorted_topics[:40])
+            topics = dict(list(topics.items())[-40:])
         self.save_json(self.initiated_topics_file, topics)
 
     def is_topic_recently_initiated(self, topic: str) -> bool:
-        """Checks if a similar topic has been initiated recently."""
         topics = self.load_json(self.initiated_topics_file)
         return topic.lower() in (t.lower() for t in topics.keys())
