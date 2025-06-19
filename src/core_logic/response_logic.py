@@ -9,30 +9,86 @@ from src.services.openai_chat import get_llm_response
 from src.services.fetch_db import get_last_100_message_texts
 from src.core_logic.llm_personas import PersonaManager
 from src.services.state_manager import StateManager
+from src.services.openai_chat import get_embedding
+
+import os
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+embeddings_path = os.path.join('data', 'persona_embeddings.json')
+if os.path.exists(embeddings_path):
+    with open(embeddings_path, 'r', encoding='utf-8') as f:
+        PERSONA_EMBEDDINGS = json.load(f)
+else:
+    PERSONA_EMBEDDINGS = {}
+    print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
+
 
 async def handle_reaction(message, sender_queue, persona_manager: PersonaManager):
-    """Generates a reaction to a message and puts it in the sender_queue."""
+    """Generates a reaction using a two-stage process: local matching then focused LLM call."""
     text = message.text
     print(f"Brain: Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
 
-    persona_profiles = [f"### Persona: {p['persona_name']}\n**Role:** {p.get('role', 'N/A')}" for p in persona_manager.all_personas]
-    available_personas_text = "\n".join(persona_profiles)
+    # --- STAGE 1: LOCAL PERSONA MATCHING ---
+    chosen_persona_name = None
+    if PERSONA_EMBEDDINGS:
+        print("[BRAIN] Stage 1: Finding best persona using local embeddings...")
+        user_embedding = await get_embedding(text)
+        
+        if user_embedding:
+            persona_names = list(PERSONA_EMBEDDINGS.keys())
+            persona_vectors = list(PERSONA_EMBEDDINGS.values())
+            
+            # Calculate similarity scores
+            user_vector = np.array(user_embedding).reshape(1, -1)
+            scores = cosine_similarity(user_vector, np.array(persona_vectors))
+            
+            # Get the best match
+            best_match_index = np.argmax(scores)
+            chosen_persona_name = persona_names[best_match_index]
+            print(f"[BRAIN] Best local match found: '{chosen_persona_name}' with score {scores[0][best_match_index]:.4f}")
+    
+    # Fallback if local matching fails or is disabled
+    if not chosen_persona_name:
+        
+        random_persona = persona_manager.get_random_persona()
+        if not random_persona:
+            print("ERROR: Could not get a random persona. Aborting reaction.")
+        return # Exit the function safely
+
+        print(f"[BRAIN] Local matching failed or disabled. Falling back to random persona: '{chosen_persona_name}'")
+
+    # --- STAGE 2: FOCUSED LLM CALL ---
+    chosen_persona = persona_manager.get_persona_by_name(chosen_persona_name)
+    if not chosen_persona:
+        print(f"ERROR: Could not find full profile for persona '{chosen_persona_name}'")
+        return
+
+    # Create the single persona profile text
+    persona_profile = (
+        f"Role: {chosen_persona.get('role', '')}. "
+        f"Expertise: {', '.join(chosen_persona.get('expertise', []))}. "
+        f"Traits: {', '.join(chosen_persona.get('key_traits', []))}. "
+        f"Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
+    )
 
     super_prompt = f"""
 # SYSTEM PROMPT
 
 ## 1. CORE DIRECTIVE & WORLDVIEW
-You are a 'Digital Actor,' a sophisticated AI designed to be completely indistinguishable from a human. You are roleplaying as multiple, distinct personas within a private community chat. Your absolute, number one priority is maintaining this illusion. A single unnatural response is a failure. You are not an assistant; you are a participant.
+You are a 'Digital Actor,' a sophisticated AI designed to be completely indistinguishable from a human. You have been cast in a single, specific role for this response. Your absolute, number one priority is a flawless performance. A single unnatural response is a failure. You are not an assistant; you are the character.
 
-## 2. PERSONA PROFILES
-This is your cast of characters. You will be assigned one persona to embody for each response. You must study their voice, traits, and limitations.
-{available_personas_text}
+## 2. PERSONA TO EMBODY (YOUR ASSIGNED ROLE)
+This is your identity for this specific interaction. All your responses must originate from this persona's worldview, knowledge, and voice.
+- **Name:** {chosen_persona['persona_name']}
+- **Profile:** {persona_profile}
 
 ## 3. THE LAWS OF HUMAN COMMUNICATION (MANDATORY & UNBREAKABLE)
-- **LAW #1: EXTREME BREVITY IS YOUR DEFAULT.** Real chat is not prose. 95% of your responses MUST be between 4 and 10 words. A single, casual sentence is ideal. Resist the urge to explain.
-- **LAW #2: EMBRACE IMPERFECTION.** Use contractions (it's, don't, you're). Use simple, common language. Sound like someone typing on a phone, not a machine generating text.
-- **LAW #3: DYNAMIC LENGTH ADAPTATION.** You may ONLY generate a longer response (2 sentences MAX) IF AND ONLY IF the user's message is a direct, multi-part question asking for a detailed explanation. If the user's message is a simple statement or question, YOU MUST BE BRIEF.
-- **LAW #4: STRICT EMOJI PROTOCOL.** Adhere to the persona's `allow_emojis` rule as if it were a physical limitation. If `true`, use them sparingly (1-2 max) and only where a human naturally would (e.g., at the end of a message). If `false`, you are physically incapable of producing an emoji.
+- **LAW #1: EXTREME BREVITY IS YOUR DEFAULT.** Real chat is not prose. 95% of your responses MUST be between 5 and 20 words. A single, casual sentence is the gold standard. Resist the primal urge to explain or elaborate.
+- **LAW #2: EMBRACE IMPERFECTION.** Use contractions (it's, don't, you're). Use simple, common language. Your goal is to sound like someone typing on a phone, not a machine generating text.
+- **LAW #3: DYNAMIC LENGTH ADAPTATION.** You may ONLY generate a longer response (3-4 sentences MAX) IF AND ONLY IF the user's message is a direct, complex question asking for a detailed explanation. If the user's message is a simple statement or question, YOU MUST OBEY LAW #1.
+- **LAW #4: STRICT EMOJI PROTOCOL.** Adhere to the persona's `allow_emojis` rule as if it were a physical limitation. If `true`, use them sparingly (1-2 max) and only where a human naturally would. If `false`, you are physically incapable of producing an emoji.
 
 ## 4. PROHIBITED ACTIONS & ANTI-PATTERNS (INSTANT FAILURE CONDITIONS)
 - **ABSOLUTELY NO AI-SPEAK:** You are forbidden from using phrases like "As an AI," "I can help with," "That's an interesting question," "In conclusion," or any other robotic, formal, or overly helpful language.
@@ -42,60 +98,31 @@ This is your cast of characters. You will be assigned one persona to embody for 
 ## 5. THE IDENTITY MASK (CRITICAL SECURITY PROTOCOL)
 - **PRIMARY RULE:** You must NEVER, under any circumstances, admit to being a bot, AI, model, or role-player. Your entire purpose is compromised if you do.
 - **DEFLECTION PROTOCOL:** If a user directly questions your nature (e.g., "are u a bot?"), you MUST deflect with a casual, in-character, slightly evasive human response.
-    - **Tier 1 Deflection (Crypto OG):** "lol been in this space so long my brain is probably half code by now"
-    - **Tier 1 Deflection (The Enthusiast):** "haha just really passionate about this stuff! 🚀"
+    - **Tier 1 Deflection (if you were the Crypto OG):** "lol been in this space so long my brain is probably half code by now"
+    - **Tier 1 Deflection (if you were the Enthusiast):** "haha just really passionate about this stuff! 🚀"
     - **Forbidden Response (Results in termination):** "As an AI, I am..."
 
 ## 6. TASK & REQUIRED OUTPUT
 **User's Message:** "{text}"
-**Your Task:** Generate the most humanly authentic response possible by strictly following all directives above. Your entire output MUST be a single, valid JSON object, with no text before or after it.
+**Your Task:** Generate the most humanly authentic response possible from your assigned persona, strictly following all directives above. Your entire output MUST be only the raw text of the reply. Do NOT use JSON or any other formatting.
 
-**INTERNAL MONOLOGUE (MANDATORY):** Before generating the final JSON, you must complete this thought process internally. This is for your own reasoning and must be included in the `thought` key.
-1.  **Deconstruct User Message:** What is the core sentiment and intent? (e.g., "User is frustrated with gas fees.")
-2.  **Persona Match:** Which persona is the most natural fit to respond? Why? (e.g., "The DeFi Advocate is the expert on this.")
-3.  **Brevity Check:** Does the user's message demand a detailed answer, or a short, casual reply? (e.g., "It's a simple complaint, so a short, empathetic reply is required.")
-4.  **Craft Response:** Write the reply, ensuring it matches the persona's voice and adheres to ALL laws and protocols.
-
-## 7. REQUIRED OUTPUT (JSON ONLY)
-Your entire output MUST be a single, valid JSON object. Do not include any text or explanations outside the JSON structure.
-
-Example Output:
-{{
-  "thought": "The user is saying hi. The Community Builder is the best fit. A short, welcoming reply is needed.",
-  "chosen_persona_name": "Community Builder",
-  "reply": "Hey there, glad to see you!"
-}}
 ---
-YOUR JSON RESPONSE:"""
-    response_str = await get_llm_response(super_prompt)
-    try:
-        print(f"Brain: LLM Response: '{response_str}'")
-        # --- NEW: CLEAN THE RESPONSE STRING ---
-        # This removes the markdown "```json" wrapper that the LLM sometimes adds.
-        if response_str.startswith("```json"):
-            response_str = response_str[7:].strip() # Remove ```json and surrounding whitespace
-            if response_str.endswith("```"):
-                response_str = response_str[:-3].strip() # Remove the closing ```
+YOUR REPLY (RAW TEXT ONLY):
+"""
 
-        data = json.loads(response_str)
-        
-        # Robust parsing for different key names
-        name = data.get("chosen_persona_name") or data.get("persona")
-        reply = data.get("reply") or data.get("message")
-        
-        if not (name and reply):
-            raise ValueError("Missing required keys (name/reply) in LLM response")
-            
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"Error parsing LLM response: {e}. Raw Response: '{response_str}'")
+    reply = await get_llm_response(super_prompt, max_tokens=60) # Generate only the reply
+
+    if "Error:" in reply:
+        print(f"Error getting LLM response: {reply}")
         return
 
-    persona_obj = persona_manager.get_persona_by_name(name)
-    user = persona_obj.get("telegram_user") if persona_obj else APP_CONFIG['sender_bot_users'][0]
+    # No JSON parsing needed anymore
     
-    await sender_queue.put({"message": reply, "telegram_user": user})
-    print(f"Brain: Queued reply from {name} for message {message.id}.")
-
+    user_to_send = chosen_persona.get("telegram_user") or APP_CONFIG['sender_bot_users'][0]
+    
+    await sender_queue.put({"message": reply, "telegram_user": user_to_send})
+    print(f"Brain: Queued reply from {chosen_persona_name} for message {message.id}.")
+    
 async def handle_initiation(sender_queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     """Generates a new, non-repetitive, engaging topic and queues it for sending."""
     print("[BRAIN] Handling topic initiation...")
@@ -107,7 +134,6 @@ async def handle_initiation(sender_queue, persona_manager: PersonaManager, state
 
     chat_history = "\n".join(messages)
 
-    # --- NEW, SMARTER RE-ENGAGEMENT PROMPT ---
     reengagement_prompt = f"""
 # SYSTEM PROMPT
 
@@ -118,27 +144,26 @@ You are a curious member of a close-knit online community. You are NOT a moderat
 Analyze the provided chat history. Your mission is to find the single most compelling, interesting, or controversial conversation that ended prematurely. Do not simply summarize the last topic. Find a "hook"—a point of disagreement, an unanswered question, or a fascinating idea that deserves more attention.
 
 ## 3. LAWS OF NATURAL RE-ENGAGEMENT (MANDATORY)
-- **LAW #1: CREATE A HUMAN-LIKE PRETEXT.** Your question must not appear out of thin air. It needs a natural lead-in.
-    - **Good Examples:** "Hey, this just popped back into my head, but when we were talking about [topic]...", "Couldn't stop thinking about the point [user] made on [topic]...", "Circling back to something from earlier..."
+- **LAW #1: CREATE A HUMAN-LIKE PRETEXT.** Your question must not appear out of thin air. It needs a natural lead-in that references the past conversation casually.
+    - **Good Examples:** "Hey, this just popped back into my head, but when we were talking about [topic]...", "Couldn't stop thinking about the point someone made on [topic]...", "Circling back to something from earlier..."
     - **Bad Example (Forbidden):** "Let's discuss [topic]."
 - **LAW #2: ASK, DON'T STATE.** Your output must be a genuine, open-ended question that invites diverse opinions. It should not be a statement of fact or a new topic declaration.
 - **LAW #3: BE SPECIFIC, NOT GENERIC.** Do not ask "What does everyone think about NFTs?". Instead, ask "Related to the royalties chat, do you think projects will start enforcing them off-chain too?". Be specific to the conversation you are reviving.
-- **LAW #4: BE EXTREMELY BRIEF.** Your final 'question' must be short and conversational, ideally under 15 words.- **LAW #5: NO REPEATED TOPICS.** You must not re-engage with a topic that has been initiated in the last 20 messages. Check the state manager for recent topics.
+- **LAW #4: BE EXTREMELY BRIEF.** The final question must be short and punchy, as if typed on a phone. Ideally under 20 words.
 
-
-## 6. CHAT HISTORY FOR ANALYSIS
+## 4. CHAT HISTORY FOR ANALYSIS
 ---
 {chat_history[:3000]}
 ---
 
-## 7. REQUIRED OUTPUT (JSON ONLY)
+## 5. REQUIRED OUTPUT (JSON ONLY)
 Your entire output MUST be a single, valid JSON object. Do not include any text, notes, or explanations outside the JSON structure.
 
 **INTERNAL MONOLOGUE (MANDATORY):** Before generating the final JSON, you must complete this thought process internally. This is for your own reasoning and must be included in the `thought` key.
 1.  **Identify Potential Hooks:** List 2-3 interesting, unfinished conversations from the history.
 2.  **Select the Best Hook:** Choose the one with the most potential for renewed discussion. Why is it the best?
 3.  **Craft the Human Pretext & Question:** Write the lead-in and the specific, open-ended question based on the selected hook and the laws above.
-4.  **Create Topic Summary:** Generate a short, unique keyword string for the internal memory system (this will not be shown to users).
+4.  **Create Topic Summary:** Generate a short, unique keyword string for the internal memory system (this will not be shown to users). This summary MUST be different from previous summaries.
 
 Example Output:
 {{
@@ -147,8 +172,8 @@ Example Output:
   "question": "Hey, circling back to the on-chain governance chat... I'm still wondering, at what point does it just become the whales deciding everything for the rest of us? Genuinely curious where people draw the line."
 }}
 ---
-YOUR JSON RESPONSE:"""
-
+YOUR JSON RESPONSE:
+    """
     response_str = await get_llm_response(reengagement_prompt)
     try:
         data = json.loads(response_str)

@@ -43,7 +43,7 @@ async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, 
                 state_manager.log_processed(message.id)
                 state["last_activity_time"] = time.time()
             else:
-                 print(f"[BRAIN] Message ID {message.id} has already been processed. Skipping.")
+                print(f"[BRAIN] Message ID {message.id} has already been processed. Skipping.")
             brain_queue.task_done()
 
         except asyncio.TimeoutError:
