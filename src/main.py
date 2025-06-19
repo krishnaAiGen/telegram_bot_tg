@@ -17,9 +17,6 @@ from src.workers.brain import brain_worker
 from src.workers.sender import sender_worker
 
 
-
-state = {"last_activity_time": time.time()}
-
 async def main():
     print("[MAIN] Initializing application...")
     brain_queue, sender_queue = asyncio.Queue(), asyncio.Queue()
@@ -42,7 +39,7 @@ async def main():
     print("[MAIN] Starting clients and background tasks...")
     
     # Start the background workers first
-    brain_task = asyncio.create_task(brain_worker(brain_queue, sender_queue, persona_manager, state_manager, db, state))
+    brain_task = asyncio.create_task(brain_worker(brain_queue, sender_queue, persona_manager, state_manager, db))
     sender_task = asyncio.create_task(sender_worker(sender_queue, sender_clients))
     
     # Use 'async with' on the main client, which will keep the script alive

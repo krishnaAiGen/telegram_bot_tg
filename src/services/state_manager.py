@@ -1,6 +1,8 @@
 # src/services/state_manager.py
 import json
 import os
+import time
+
 from datetime import datetime, timezone
 
 from config.settings import APP_CONFIG
@@ -14,8 +16,12 @@ class StateManager:
         self.processed_log_file = os.path.join(self.data_dir, 'processed_log.json')
         self.initiated_topics_file = os.path.join(self.data_dir, 'initiated_topics.json')
         
+        self.bot_state_file = os.path.join(self.data_dir, 'bot_state.json')
+          
         self.save_json(self.processed_log_file, {}) 
         self._init_json_file(self.initiated_topics_file, {})
+        self._init_json_file(self.bot_state_file, {"last_activity_time": time.time()})
+
 
     def _init_json_file(self, file_path, default_content):
         if not os.path.exists(file_path):
@@ -31,6 +37,17 @@ class StateManager:
     def save_json(self, file_path, data):
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
+            
+    def load_bot_state(self) -> dict:
+        """Loads the bot's core state, providing defaults if missing."""
+        state = self.load_json(self.bot_state_file)
+        if "last_activity_time" not in state:
+            state["last_activity_time"] = time.time()
+        return state
+
+    def save_bot_state(self, state: dict):
+        """Saves the bot's core state to the file."""
+        self.save_json(self.bot_state_file, state)
 
     def has_processed(self, message_id: int) -> bool:
         log = self.load_json(self.processed_log_file)

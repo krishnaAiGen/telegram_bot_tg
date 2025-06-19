@@ -9,8 +9,9 @@ from src.services.fetch_db import save_message_to_db
 
 
 
-async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, persona_manager: PersonaManager, state_manager: StateManager, db, state):
+async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     print("[BRAIN] Worker started. Waiting for messages...")
+    bot_state = state_manager.load_bot_state()
     while True:
         try:
             message = await asyncio.wait_for(brain_queue.get(), timeout=1.0)
@@ -46,18 +47,20 @@ async def brain_worker(brain_queue: asyncio.Queue, sender_queue: asyncio.Queue, 
                 # If we pass the gate (or if the rate is 1.0), proceed as normal.
                 await handle_reaction(message, sender_queue, persona_manager)
                 state_manager.log_processed(message.id)
-                state["last_activity_time"] = time.time()
+                bot_state["last_activity_time"] = time.time()
+                state_manager.save_bot_state(bot_state)
             else:
                  print(f"[BRAIN] Message ID {message.id} has already been processed.")
             brain_queue.task_done()
 
         except asyncio.TimeoutError:
             now = time.time()
-            if now - state['last_activity_time'] > APP_CONFIG['min_initiate_hours'] * 3600:
-                print(f"[BRAIN] Inactivity detected. Calling handle_initiation...")
+            # --- MODIFIED: Use persistent state for check ---
+            if now - bot_state['last_activity_time'] > APP_CONFIG['min_initiate_hours'] * 3600:
                 await handle_initiation(sender_queue, persona_manager, state_manager, db)
-                state["last_activity_time"] = now
-                
+                # --- MODIFIED: Update and save state ---
+                bot_state["last_activity_time"] = now
+                state_manager.save_bot_state(bot_state)
         except Exception as e:
             print(f"CRITICAL ERROR in Brain Worker: {e}")
             await asyncio.sleep(10)
