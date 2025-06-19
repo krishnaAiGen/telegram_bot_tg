@@ -30,6 +30,7 @@ APP_CONFIG = {
     "min_initiate_hours": float(os.getenv("MIN_INITIATE_HOURS", 1.0)),
     "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 5.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 15.0)),
+    "random_response_rate": float(os.getenv("RANDOM_RESPONSE_RATE", 1.0)),
 }
 
 TELEGRAM_USERS = {}
