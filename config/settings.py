@@ -22,7 +22,7 @@ CHARACTERS_DATA = load_characters_config(CHARACTERS_FILE_PATH)
 APP_CONFIG = {
     "openai_api_key": os.getenv("OPENAI_API_KEY"),
     "firebase_cred_path": os.getenv("FIREBASE_CRED_PATH"),
-    "telegram_channel": os.getenv("TELEGRAM_CHANNEL"),
+    "telegram_group_id": int(os.getenv("TELEGRAM_GROUP_ID", 0)),
     "data_dir": os.path.join(project_root, 'data'),
     "ingestor_bot_user": os.getenv("INGESTOR_BOT_USER"),
     "sender_bot_users": [user.strip() for user in os.getenv("SENDER_BOT_USERS", "").split(',') if user.strip()],

@@ -8,6 +8,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*__pycache__/
+*/*__pycache__/
+
 
 # --- IDEs and Editors ---
 # Ignore VS Code specific files
@@ -43,3 +46,30 @@ Thumbs.db
 # Ignore any zip files or build artifacts
 *.zip
 *.tar.gz
+# Python virtual environment
+# This is crucial to keep your local packages out of version control.
+venv/
+*/venv/
+.venv/
+
+# Python cache files
+# These are the files you specifically asked to ignore.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables file
+# CRITICAL: This file contains secret keys and should NEVER be committed.
+.env
+*.env
+
+# Local data and session files
+# These are specific to your local run and should not be shared.
+data/
+*.session
+*.session-journal
+
+# IDE-specific files (optional but good practice)
+.vscode/
+.idea/

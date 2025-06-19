@@ -1,3 +1,4 @@
+# src/services/state_manager.py
 import json
 import os
 from datetime import datetime, timezone
@@ -11,7 +12,10 @@ class StateManager:
         os.makedirs(self.data_dir, exist_ok=True)
         
         self.processed_log_file = os.path.join(self.data_dir, 'processed_log.json')
+        self.initiated_topics_file = os.path.join(self.data_dir, 'initiated_topics.json')
+        
         self._init_json_file(self.processed_log_file, {})
+        self._init_json_file(self.initiated_topics_file, {})
 
     def _init_json_file(self, file_path, default_content):
         if not os.path.exists(file_path):
@@ -39,3 +43,17 @@ class StateManager:
             sorted_items = sorted(log.items(), key=lambda item: item[1], reverse=True)
             log = dict(sorted_items[:400])
         self.save_json(self.processed_log_file, log)
+
+    def log_initiated_topic(self, topic: str):
+        """Logs a topic that the bot has initiated."""
+        topics = self.load_json(self.initiated_topics_file)
+        topics[topic] = datetime.now(timezone.utc).isoformat()
+        if len(topics) > 50:
+            sorted_topics = sorted(topics.items(), key=lambda item: item[1], reverse=True)
+            topics = dict(sorted_topics[:40])
+        self.save_json(self.initiated_topics_file, topics)
+
+    def is_topic_recently_initiated(self, topic: str) -> bool:
+        """Checks if a similar topic has been initiated recently."""
+        topics = self.load_json(self.initiated_topics_file)
+        return topic.lower() in (t.lower() for t in topics.keys())
