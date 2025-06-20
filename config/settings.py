@@ -33,7 +33,7 @@ APP_CONFIG = {
     "random_response_rate": float(os.getenv("RANDOM_RESPONSE_RATE", 1.0)),
     "xai_api_key": os.getenv("XAI_API_KEY"),
     "triage_model": os.getenv("TRIAGE_MODEL", "gpt-3.5-turbo"),
-    "response_context_messages": os.getenv("RESPONSE_CONTEXT_MESSAGES",4),
+    "response_context_messages": int(os.getenv("RESPONSE_CONTEXT_MESSAGES",4)),
 }
 
 TELEGRAM_USERS = {}
