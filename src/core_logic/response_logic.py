@@ -44,7 +44,7 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
     text = message.text
     print(f"[BRAIN] Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
     
-    conversation_context = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), 4, db)
+    conversation_context = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), APP_CONFIG['response_context_messages'], db)
     
     # --- STAGE 1: LOCAL PERSONA MATCHING ---
     chosen_persona_name = None
