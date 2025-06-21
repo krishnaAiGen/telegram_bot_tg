@@ -31,7 +31,7 @@ APP_CONFIG = {
     "min_send_delay_secs": float(os.getenv("MIN_SEND_DELAY_SECS", 5.0)),
     "max_send_delay_secs": float(os.getenv("MAX_SEND_DELAY_SECS", 15.0)),
     "random_response_rate": float(os.getenv("RANDOM_RESPONSE_RATE", 1.0)),
-    "xai_api_key": os.getenv("XAI_API_KEY"),
+    "xai_api_key": os.getenv("X_API_KEY"),
     "triage_model": os.getenv("TRIAGE_MODEL", "gpt-3.5-turbo"),
     "response_context_messages": int(os.getenv("RESPONSE_CONTEXT_MESSAGES",4)),
 }

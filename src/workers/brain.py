@@ -51,7 +51,7 @@ USER MESSAGE: {message.text}"
                 print(f"[BRAIN] Triage decision: '{decision}'")
 
                 if "REALTIME_FACTS" in decision:
-                    await handle_realtime_query(message, sender_queue)
+                    await handle_realtime_query(message, sender_queue, persona_manager) 
                 else:
                     # --- STAGE 2: PROBABILITY GATE (for persona opinions only) ---
                     response_rate = APP_CONFIG.get("random_response_rate", 1.0)

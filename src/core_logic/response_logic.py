@@ -23,22 +23,87 @@ if os.path.exists(embeddings_path):
 else:
     PERSONA_EMBEDDINGS = {}
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
+    
+    
+    
+# src/core_logic/response_logic.py
 
-async def handle_realtime_query(message, sender_queue):
-    """Handles queries that require real-time information by calling Grok."""
-    print(f"[BRAIN] Routing message ID {message.id} to Grok for real-time data.")
+# ... (keep imports and handle_reaction / handle_initiation) ...
+
+# --- NEW, MORE POWERFUL HUMANIZER FUNCTION ---
+async def humanize_grok_response(grok_data: str, original_question: str, persona_manager: PersonaManager) -> str:
+    """
+    Takes raw data from Grok and uses OpenAI to transform it into a natural,
+    human-sounding chat message.
+    """
+    print(f"[BRAIN] Humanizing Grok data: '{grok_data[:50]}...'")
     
-    # A simple, direct prompt for Grok
-    grok_prompt = f"Based on the latest information available, provide a concise answer to the following user query: '{message.text}'"
+    chosen_persona = persona_manager.get_random_persona()
+    if not chosen_persona:
+        return f"I found this information: {grok_data}"
+
+    persona_profile = f"Role: {chosen_persona.get('role', '')}. Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
+    print(f"[BRAIN] Using persona: {chosen_persona['persona_name']} with profile: {persona_profile}")
+
+    # --- NEW, STRONGER HUMANIZER PROMPT ---
+    humanizer_prompt = f"""
+# YOUR ROLE & CONTEXT
+You are a member of a chat group. You just read a quick news update or data point and are about to share the most interesting part with your friends. Your goal is to sound like a real person sharing a quick thought, not a machine reporting data.
+
+# PERSONA TO EMBODY
+You must speak in the voice of this persona:
+- Name: {chosen_persona['persona_name']}
+- Profile: {persona_profile}
+
+# RAW DATA YOU JUST READ
+"{grok_data}"
+
+# YOUR TASK & RULES
+1.  **DO NOT BE A REPORTER.** Do not just rephrase the data. Find the single most interesting takeaway.
+2.  **BE EXTREMELY BRIEF.** Your entire message MUST be 1-2 casual sentences, ideally under 15 words.
+3.  **START NATURALLY.** Start your message like a real person would (e.g., "Wow, looks like...", "Interesting, I'm seeing that...", "Just saw that...").
+4.  **OUTPUT RAW TEXT ONLY.**
+
+---
+YOUR HUMANIZED CHAT MESSAGE (RAW TEXT ONLY):
+"""
     
-    # Call the (placeholder) Grok service
-    reply = await get_grok_response(grok_prompt)
+    humanized_reply = await get_llm_response(humanizer_prompt, max_tokens=60)
     
-    # Use the first available sender bot to deliver the factual answer
+    if "Error:" in humanized_reply:
+        print(f"[BRAIN] Humanizer failed. Falling back to raw data. Error: {humanized_reply}")
+        return f"I found this update: {grok_data}"
+        
+    return humanized_reply
+
+# --- MODIFIED REAL-TIME HANDLER WITH A BETTER GROK PROMPT ---
+async def handle_realtime_query(message, sender_queue, persona_manager: PersonaManager):
+    """
+    Handles real-time queries by first getting brief facts from Grok, then
+    humanizing the response with OpenAI.
+    """
+    print(f"[BRAIN] Routing message ID {message.id} to Grok for fact-gathering.")
+    
+    # --- NEW, MORE CONSTRAINED GROK PROMPT ---
+    grok_prompt = f"""Regarding the user's query: '{message.text}'.
+Provide the single most important fact or data point as a raw, unformatted sentence. Be extremely brief. Do not explain.
+"""
+    
+    raw_grok_data = await get_grok_response(grok_prompt)
+    
+    if "Error:" in raw_grok_data:
+        print(f"[BRAIN] Grok service failed. Aborting response. Reason: {raw_grok_data}")
+        return
+
+    final_reply = await humanize_grok_response(raw_grok_data, message.text, persona_manager)
+
     user_to_send = APP_CONFIG['sender_bot_users'][0]
     
-    await sender_queue.put({"message": reply, "telegram_user": user_to_send})
-    print(f"[BRAIN] Queued Grok's response for message {message.id}.")
+    await sender_queue.put({"message": final_reply, "telegram_user": user_to_send})
+    print(f"[BRAIN] Queued final (humanized) response for message {message.id}.")
+
+
+
 async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager, db):
     """Generates a reaction using a two-stage process with persona stickiness."""
     text = message.text
