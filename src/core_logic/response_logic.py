@@ -25,12 +25,6 @@ else:
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
     
     
-    
-# src/core_logic/response_logic.py
-
-# ... (keep imports and handle_reaction / handle_initiation) ...
-
-# --- NEW, MORE POWERFUL HUMANIZER FUNCTION ---
 async def humanize_grok_response(grok_data: str, original_question: str, persona_manager: PersonaManager) -> str:
     """
     Takes raw data from Grok and uses OpenAI to transform it into a natural,
@@ -76,7 +70,6 @@ YOUR HUMANIZED CHAT MESSAGE (RAW TEXT ONLY):
         
     return humanized_reply
 
-# --- MODIFIED REAL-TIME HANDLER WITH A BETTER GROK PROMPT ---
 async def handle_realtime_query(message, sender_queue, persona_manager: PersonaManager):
     """
     Handles real-time queries by first getting brief facts from Grok, then
@@ -84,7 +77,6 @@ async def handle_realtime_query(message, sender_queue, persona_manager: PersonaM
     """
     print(f"[BRAIN] Routing message ID {message.id} to Grok for fact-gathering.")
     
-    # --- NEW, MORE CONSTRAINED GROK PROMPT ---
     grok_prompt = f"""Regarding the user's query: '{message.text}'.
 Provide the single most important fact or data point as a raw, unformatted sentence. Be extremely brief. Do not explain.
 """

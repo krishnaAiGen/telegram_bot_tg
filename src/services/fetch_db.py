@@ -30,7 +30,7 @@ async def get_last_n_messages_as_text(group_id: str, n: int, db) -> str:
     if not docs:
         return "No recent messages."
         
-    # Reverse to get chronological order
+    # chronological order
     docs.reverse()
     
     formatted_history = []

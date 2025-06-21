@@ -16,7 +16,7 @@ class StateManager:
         self.initiated_topics_file = os.path.join(self.data_dir, 'initiated_topics.json')
         self.bot_state_file = os.path.join(self.data_dir, 'bot_state.json')
         
-        self.save_json(self.processed_log_file, {}) # Always start with a fresh reaction memory
+        self.save_json(self.processed_log_file, {}) 
         self.save_json(self.initiated_topics_file, {})
         # Initialize bot state with defaults if the file doesn't exist
         self._init_json_file(self.bot_state_file, {

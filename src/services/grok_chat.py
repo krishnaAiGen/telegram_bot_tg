@@ -7,7 +7,6 @@ from config.settings import APP_CONFIG
 GROK_API_KEY = APP_CONFIG.get("xai_api_key")
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# --- CORRECTED: Use the model name from your working example ---
 async def get_grok_response(content: str, model: str = "grok-3-latest") -> str:
     """
     Gets a response from the Grok API.
