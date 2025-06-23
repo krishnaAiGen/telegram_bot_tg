@@ -25,9 +25,11 @@ if os.path.exists(embeddings_path):
 else:
     PERSONA_EMBEDDINGS = {}
     print("WARNING: 'persona_embeddings.json' not found. Persona matching will be disabled.")
+
+
     
     
-async def humanize_grok_response(grok_data: str, original_question: str, persona_manager: PersonaManager) -> str:
+async def humanize_grok_response(grok_data: str, original_question: str, persona_manager: PersonaManager, db) -> str:
     """
     Takes raw data from Grok and uses OpenAI to transform it into a natural,
     human-sounding chat message.
@@ -41,6 +43,10 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
     persona_profile = f"Role: {chosen_persona.get('role', '')}. Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
     print(f"[BRAIN] Using persona: {chosen_persona['persona_name']} with profile: {persona_profile}")
 
+    #get last n messages from the group
+    last_n_messages = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), int(os.getenv("RESPONSE_CONTEXT_MESSAGES")), db)
+    print(f"-----last_n_messages-----: {last_n_messages}")
+
     # --- NEW, STRONGER HUMANIZER PROMPT ---
     humanizer_prompt = f"""
         # CONTEXT
@@ -53,7 +59,7 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
         1. **KEEP IT CHILL.** Don’t summarize everything. Just share the one thing that made you go “damn.”
         2. **BE QUICK.** 1–2 sentences max. Try to keep it under 20 words.
         3. **Reply to greetings if needed, followed by other messages.
-        3. **SOUND NATURAL.** Start like a real person and use any of the following when needed:
+        3. **SOUND NATURAL.** Start like a real person and use any of the following if needed but don't overdo it:
         - “wait—”
         - “lmao just saw…”
         - “bruh…”
@@ -77,6 +83,7 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
         7. **Don't wrap your response in quotes.**
         8. **Make grammar or spelling mistakes if you can for example: doing -> dooing, nothing -> nthng, finance-> finacne, know -> knw, should -> shud, would -> wud, could -> cud, love -> luv, thanks -> thx, great -> gr8, etc.**
         9. **Never starts first letter with capital and never use any punctuations mark**
+        10. **Use the last n messages from the group as context if needed to make your response more natural but don't use same strcuture and accent as the last n messages: {last_n_messages}**
 
         ---
         YOUR CHAT MESSAGE (JUST TEXT):
@@ -94,7 +101,7 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
         
     return humanized_reply
 
-async def handle_realtime_query(message, sender_queue, persona_manager: PersonaManager):
+async def handle_realtime_query(message, sender_queue, persona_manager: PersonaManager, db):
     """
     Handles real-time queries by first getting brief facts from Grok, then
     humanizing the response with OpenAI.
@@ -105,7 +112,7 @@ async def handle_realtime_query(message, sender_queue, persona_manager: PersonaM
     memory_context = get_memory_context(message.text)
     print(f"-----memory_context for realtime query and for message {message.text}-----: {memory_context}")
     
-    grok_prompt = f"""##0. Previous chat Context: {memory_context} Regarding the user's query: '{message.text}'.
+    grok_prompt = f"""##0. Previous chat Context. Use anything from this context if needed to make your response more natural: {memory_context} Regarding the user's query: '{message.text}'.
 Provide the single most important fact or data point as a raw, unformatted sentence. Be extremely brief. Do not explain.
 """
     
@@ -115,7 +122,7 @@ Provide the single most important fact or data point as a raw, unformatted sente
         print(f"[BRAIN] Grok service failed. Aborting response. Reason: {raw_grok_data}")
         return
 
-    final_reply = await humanize_grok_response(raw_grok_data, message.text, persona_manager)
+    final_reply = await humanize_grok_response(raw_grok_data, message.text, persona_manager, db)
     print(f"-----fact:raw grok data-----: {raw_grok_data}")
     print(f"-----fact:humanized reply-----: {final_reply}")
 
@@ -196,7 +203,7 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
 
     super_prompt = f"""
 # SYSTEM PROMPT
-##0. Previous chat Context: {memory_context}
+##0. Previous chat Context. Use anything from this context if needed to make your response more natural: {memory_context}
 
 ### Few-shot style guide
 # Goal: sound like a savvy, approachable human in a Telegram group.
@@ -265,7 +272,7 @@ YOUR REPLY (RAW TEXT ONLY):
     reply = re.sub(r'^"(.*)"$', r'\1', reply.strip())
 
     print(f"-----persona-based-reply-----: {reply}")
-    reply = await humanize_grok_response(reply, text, persona_manager)
+    reply = await humanize_grok_response(reply, text, persona_manager, db)
     print(f"-----persona-based-reply-after-humanization-----: {reply}")
 
     if "Error:" in reply:
@@ -342,6 +349,7 @@ Example Output:
 YOUR JSON RESPONSE:
     """
     response_str = await get_llm_response(reengagement_prompt)
+    response_str = await humanize_grok_response(response_str, "topic initiation conversation starter", persona_manager, db)
     try:
         data = json.loads(response_str)
         topic, question = data.get("topic_summary"), data.get("question")
