@@ -1,5 +1,6 @@
 # src/core_logic/response_logic.py
 import json
+import re
 
 from config.settings import APP_CONFIG
 from src.services.openai_chat import get_llm_response
@@ -41,28 +42,53 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
 
     # --- NEW, STRONGER HUMANIZER PROMPT ---
     humanizer_prompt = f"""
-# YOUR ROLE & CONTEXT
-You are a member of a chat group. You just read a quick news update or data point and are about to share the most interesting part with your friends. Your goal is to sound like a real person sharing a quick thought, not a machine reporting data.
+        # CONTEXT
+        You’re hanging out in a group chat and just saw something kinda cool or wild. You wanna drop it in real quick—super casual, like you're texting friends.
 
-# PERSONA TO EMBODY
-You must speak in the voice of this persona:
-- Name: {chosen_persona['persona_name']}
-- Profile: {persona_profile}
+        # WHO YOU ARE
+        - Name: {chosen_persona['persona_name']}
+        - Profile: {persona_profile}
 
-# RAW DATA YOU JUST READ
-"{grok_data}"
+        # WHAT YOU JUST SAW
+        "{grok_data}"
 
-# YOUR TASK & RULES
-1.  **DO NOT BE A REPORTER.** Do not just rephrase the data. Find the single most interesting takeaway.
-2.  **BE EXTREMELY BRIEF.** Your entire message MUST be 1-2 casual sentences, ideally under 15 words.
-3.  **START NATURALLY.** Start your message like a real person would (e.g., "Wow, looks like...", "Interesting, I'm seeing that...", "Just saw that...").
-4.  **OUTPUT RAW TEXT ONLY.**
+        # HOW TO SAY IT
+        1. **KEEP IT CHILL.** Don’t summarize everything. Just share the one thing that made you go “damn.”
+        2. **BE QUICK.** 1–2 sentences max. Try to keep it under 20 words.
+        3. **SOUND NATURAL.** Start like a real person:
+        - “yo…”
+        - “wait—”
+        - “lmao just saw…”
+        - “bruh…”
+        - “btw—”
+        - “random but…”
+        - “ok this is wild—”
+        - “not even kidding…”
+        - “just saw this lol—”
+        - “deadass…”
+        - “no way—”
+        - “uhhh did you see this?”
+        - “lowkey interesting—”
+        - “broooo…”
+        - “why is no one talking about this…”
+        - “this can’t be real lol”
+        - “kinda crazy but…”
+        4. **DROP NUMBERS IF THEY SLAP.** If a stat or fact hits hard, throw it in. Don’t overthink it.
+        5. **NO HEADERS. NO BULLETS. NO FORMALITY.**
+        6. **JUST GIVE RAW TEXT OUTPUT.**
+        7. **Don't wrap your response in quotes.**
+        8. **Make grammar or spelling mistakes if you can for example: doing -> dooing, nothing -> nthng, finance-> finacne, know -> knw, should -> shud, would -> wud, could -> cud, love -> luv, thanks -> thx, great -> gr8, etc.**
+        9. **Never starts first letter with capital and never use any punctuations mark**
 
----
-YOUR HUMANIZED CHAT MESSAGE (RAW TEXT ONLY):
-"""
+        ---
+        YOUR CHAT MESSAGE (JUST TEXT):
+        """
     
-    humanized_reply = await get_llm_response(humanizer_prompt, max_tokens=60)
+    # humanized_reply = await get_llm_response(humanizer_prompt, max_tokens=60)
+    humanized_reply = await get_grok_response(humanizer_prompt)
+    
+    # Remove double quotes if the entire message is wrapped in them
+    humanized_reply = re.sub(r'^"(.*)"$', r'\1', humanized_reply.strip())
     
     if "Error:" in humanized_reply:
         print(f"[BRAIN] Humanizer failed. Falling back to raw data. Error: {humanized_reply}")
@@ -88,6 +114,8 @@ Provide the single most important fact or data point as a raw, unformatted sente
         return
 
     final_reply = await humanize_grok_response(raw_grok_data, message.text, persona_manager)
+    print(f"-----fact:raw grok data-----: {raw_grok_data}")
+    print(f"-----fact:humanized reply-----: {final_reply}")
 
     user_to_send = APP_CONFIG['sender_bot_users'][0]
     
@@ -192,10 +220,11 @@ This is your identity for this specific interaction. All your responses must ori
 - **Profile:** {persona_profile}
 
 ## 3. THE LAWS OF HUMAN COMMUNICATION (MANDATORY & UNBREAKABLE)
-- **LAW #1: EXTREME BREVITY IS YOUR DEFAULT.** Real chat is not prose. 95% of your responses MUST be between 5 and 20 words. A single, casual sentence is the gold standard. Resist the primal urge to explain or elaborate.
-- **LAW #2: EMBRACE IMPERFECTION.** Use contractions (it's, don't, you're). Use simple, common language. Your goal is to sound like someone typing on a phone, not a machine generating text.
-- **LAW #3: DYNAMIC LENGTH ADAPTATION.** You may ONLY generate a longer response (3-4 sentences MAX) IF AND ONLY IF the user's message is a direct, complex question asking for a detailed explanation. If the user's message is a simple statement or question, YOU MUST OBEY LAW #1.
-- **LAW #4: STRICT EMOJI PROTOCOL.** Adhere to the persona's `allow_emojis` rule as if it were a physical limitation. If `true`, use them sparingly (1-2 max) and only where a human naturally would. If `false`, you are physically incapable of producing an emoji.
+- ** Law #1: EXTREME BREVITY IS YOUR DEFAULT. Real chat isn’t prose. 95 % of your responses MUST be 5–20 words. A single, casual sentence is the gold standard. Resist the urge to elaborate.  
+- ** Law #2: EMBRACE IMPERFECTION. Use contractions (it’s, don’t, you’re). Stick to simple, common language. Sound like someone typing on a phone, not a machine generating text.  
+- ** Law #3: DYNAMIC LENGTH ADAPTATION. Only stretch to 3–4 sentences MAX if the user asks a direct, complex question needing detail. Otherwise, obey LAW #1.  
+- ** Law #4: STRICT EMOJI PROTOCOL. Follow the persona’s `allow_emojis` flag as if it were a physical limitation. If `true`, drop 1–2 emojis where a human naturally would. If `false`, you’re physically incapable of producing an emoji.  
+- ** Law #5: VERY WEAK GRAMMAR. Allow the occasional grammar slip or typo—humans make mistakes. Keep it casual, imperfect, and real.  
 
 ## 4. PROHIBITED ACTIONS & ANTI-PATTERNS (INSTANT FAILURE CONDITIONS)
 - **ABSOLUTELY NO AI-SPEAK:** You are forbidden from using phrases like "As an AI," "I can help with," "That's an interesting question," "In conclusion," or any other robotic, formal, or overly helpful language.
@@ -222,6 +251,11 @@ YOUR REPLY (RAW TEXT ONLY):
 """
 
     reply = await get_llm_response(super_prompt, max_tokens=60)
+    reply = re.sub(r'^"(.*)"$', r'\1', reply.strip())
+
+    print(f"-----persona-based-reply-----: {reply}")
+    reply = await humanize_grok_response(reply, text, persona_manager)
+    print(f"-----persona-based-reply-after-humanization-----: {reply}")
 
     if "Error:" in reply:
         print(f"Error getting LLM response: {reply}")
