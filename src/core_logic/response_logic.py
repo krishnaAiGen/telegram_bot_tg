@@ -10,6 +10,7 @@ from src.services.state_manager import StateManager
 from src.services.openai_chat import get_embedding
 from src.services.fetch_db import get_last_n_messages_as_text
 from src.services.grok_chat import get_grok_response
+from src.core_logic.memory import get_memory_context, add_to_memory
 
 import time
 import os
@@ -45,18 +46,14 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
         # CONTEXT
         You’re hanging out in a group chat and just saw something kinda cool or wild. You wanna drop it in real quick—super casual, like you're texting friends.
 
-        # WHO YOU ARE
-        - Name: {chosen_persona['persona_name']}
-        - Profile: {persona_profile}
-
         # WHAT YOU JUST SAW
         "{grok_data}"
 
         # HOW TO SAY IT
         1. **KEEP IT CHILL.** Don’t summarize everything. Just share the one thing that made you go “damn.”
         2. **BE QUICK.** 1–2 sentences max. Try to keep it under 20 words.
-        3. **SOUND NATURAL.** Start like a real person:
-        - “yo…”
+        3. **Reply to greetings if needed, followed by other messages.
+        3. **SOUND NATURAL.** Start like a real person and use any of the following when needed:
         - “wait—”
         - “lmao just saw…”
         - “bruh…”
@@ -73,6 +70,7 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
         - “why is no one talking about this…”
         - “this can’t be real lol”
         - “kinda crazy but…”
+        - “yup…”
         4. **DROP NUMBERS IF THEY SLAP.** If a stat or fact hits hard, throw it in. Don’t overthink it.
         5. **NO HEADERS. NO BULLETS. NO FORMALITY.**
         6. **JUST GIVE RAW TEXT OUTPUT.**
@@ -103,7 +101,11 @@ async def handle_realtime_query(message, sender_queue, persona_manager: PersonaM
     """
     print(f"[BRAIN] Routing message ID {message.id} to Grok for fact-gathering.")
     
-    grok_prompt = f"""Regarding the user's query: '{message.text}'.
+    # Get memory context for the query
+    memory_context = get_memory_context(message.text)
+    print(f"-----memory_context for realtime query and for message {message.text}-----: {memory_context}")
+    
+    grok_prompt = f"""##0. Previous chat Context: {memory_context} Regarding the user's query: '{message.text}'.
 Provide the single most important fact or data point as a raw, unformatted sentence. Be extremely brief. Do not explain.
 """
     
@@ -117,6 +119,10 @@ Provide the single most important fact or data point as a raw, unformatted sente
     print(f"-----fact:raw grok data-----: {raw_grok_data}")
     print(f"-----fact:humanized reply-----: {final_reply}")
 
+    # Add query and response to memory
+    add_to_memory(message.text, "user")
+    add_to_memory(final_reply, "assistant")
+
     user_to_send = APP_CONFIG['sender_bot_users'][0]
     
     await sender_queue.put({"message": final_reply, "telegram_user": user_to_send})
@@ -128,6 +134,10 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
     """Generates a reaction using a two-stage process with persona stickiness."""
     text = message.text
     print(f"[BRAIN] Reacting to Message ID: {message.id} | Text: '{text[:40]}...'")
+    
+    # Get memory context for the message
+    memory_context = get_memory_context(text)
+    print(f"-----memory_context for reaction and for message {text}-----: {memory_context}")
     
     conversation_context = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), APP_CONFIG['response_context_messages'], db)
     
@@ -186,7 +196,8 @@ async def handle_reaction(message, sender_queue, persona_manager: PersonaManager
 
     super_prompt = f"""
 # SYSTEM PROMPT
-## Initial Logic
+##0. Previous chat Context: {memory_context}
+
 ### Few-shot style guide
 # Goal: sound like a savvy, approachable human in a Telegram group.
 # Rules: be concise, sprinkle in casual language, offer helpful next steps.
@@ -261,6 +272,10 @@ YOUR REPLY (RAW TEXT ONLY):
         print(f"Error getting LLM response: {reply}")
         return
     
+    # Add message and response to memory
+    add_to_memory(text, "user")
+    add_to_memory(reply, "assistant")
+    
     # --- CLEANED UP: Update the state with the chosen persona ---
     state_manager.update_last_persona_info(chosen_persona_name)
     print(f"[BRAIN] Updated last used persona to '{chosen_persona_name}'")
@@ -280,9 +295,14 @@ async def handle_initiation(sender_queue, persona_manager: PersonaManager, state
         return
 
     chat_history = "\n".join(messages)
+    
+    # Get memory context for topic initiation
+    memory_context = get_memory_context("topic initiation conversation starter")
+    print(f"-----memory_context for topic initiation-----: {memory_context}")
 
     reengagement_prompt = f"""
 # SYSTEM PROMPT
+##0. Previous chat Context: {memory_context}
 
 ## 1. YOUR ROLE & MOTIVATION
 You are a curious member of a close-knit online community. You are NOT a moderator or a content generator. You've been thinking about a conversation from earlier and have a genuine follow-up question. Your goal is to sound like a real person naturally re-engaging with a topic that piqued your interest. The success of this task is measured by how natural and un-forced the re-engagement feels.
@@ -298,12 +318,12 @@ Analyze the provided chat history. Your mission is to find the single most compe
 - **LAW #3: BE SPECIFIC, NOT GENERIC.** Do not ask "What does everyone think about NFTs?". Instead, ask "Related to the royalties chat, do you think projects will start enforcing them off-chain too?". Be specific to the conversation you are reviving.
 - **LAW #4: BE EXTREMELY BRIEF.** The final question must be short and punchy, as if typed on a phone. Ideally under 20 words.
 
-## 4. CHAT HISTORY FOR ANALYSIS
+## 3.5. CHAT HISTORY FOR ANALYSIS
 ---
 {chat_history[:3000]}
 ---
 
-## 5. REQUIRED OUTPUT (JSON ONLY)
+## 4. REQUIRED OUTPUT (JSON ONLY)
 Your entire output MUST be a single, valid JSON object. Do not include any text, notes, or explanations outside the JSON structure.
 
 **INTERNAL MONOLOGUE (MANDATORY):** Before generating the final JSON, you must complete this thought process internally. This is for your own reasoning and must be included in the `thought` key.
@@ -338,6 +358,9 @@ YOUR JSON RESPONSE:
     # If the topic is new, log it before sending
     state_manager.log_initiated_topic(topic)
     print(f"[BRAIN] New unique topic identified: '{topic}'. Logging and preparing to send.")
+    
+    # Add the initiated topic to memory
+    add_to_memory(question, "assistant")
     
     # Pick a random persona to ask the question
     persona = persona_manager.get_random_persona()
