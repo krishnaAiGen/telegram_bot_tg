@@ -38,68 +38,80 @@ async def humanize_grok_response(grok_data: str, original_question: str, persona
     
     chosen_persona = persona_manager.get_random_persona()
     if not chosen_persona:
-        return f"I found this information: {grok_data}"
+        return f"{grok_data}"
 
     persona_profile = f"Role: {chosen_persona.get('role', '')}. Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
     print(f"[BRAIN] Using persona: {chosen_persona['persona_name']} with profile: {persona_profile}")
 
-    #get last n messages from the group
-    last_n_messages = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), int(os.getenv("RESPONSE_CONTEXT_MESSAGES")), db)
-    print(f"-----last_n_messages-----: {last_n_messages}")
+    # Get last n messages from the group
+    try:
+        last_n_messages = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), int(os.getenv("RESPONSE_CONTEXT_MESSAGES", "4")), db)
+        print(f"-----last_n_messages-----: {last_n_messages}")
+    except Exception as e:
+        print(f"[BRAIN] Error getting last messages: {e}")
+        last_n_messages = "No recent context available"
 
-    # --- NEW, STRONGER HUMANIZER PROMPT ---
+    # Humanizer prompt
     humanizer_prompt = f"""
         # CONTEXT
-        You’re hanging out in a group chat and just saw something kinda cool or wild. You wanna drop it in real quick—super casual, like you're texting friends.
+        You're hanging out in a group chat and just saw something kinda cool or wild. You wanna drop it in real quick—super casual, like you're texting friends.
 
-        # WHAT YOU JUST SAW
-        "{grok_data}"
+        # Rephrase the following reply: "{grok_data}" by taking following points into consideration:
 
         # HOW TO SAY IT
-        1. **KEEP IT CHILL.** Don’t summarize everything. Just share the one thing that made you go “damn.”
+        1. **KEEP IT CHILL.** Don't summarize everything. Just share the one thing that made you go "damn."
         2. **BE QUICK.** 1–2 sentences max. Try to keep it under 20 words.
         3. **Reply to greetings if needed, followed by other messages.
         3. **SOUND NATURAL.** Start like a real person and use any of the following if needed but don't overdo it:
-        - “wait—”
-        - “lmao just saw…”
-        - “bruh…”
-        - “btw—”
-        - “random but…”
-        - “ok this is wild—”
-        - “not even kidding…”
-        - “just saw this lol—”
-        - “deadass…”
-        - “no way—”
-        - “uhhh did you see this?”
-        - “lowkey interesting—”
-        - “broooo…”
-        - “why is no one talking about this…”
-        - “this can’t be real lol”
-        - “kinda crazy but…”
-        - “yup…”
-        4. **DROP NUMBERS IF THEY SLAP.** If a stat or fact hits hard, throw it in. Don’t overthink it.
+        - "wait—"
+        - "lmao just saw…"
+        - "bruh…"
+        - "btw—"
+        - "random but…"
+        - "ok this is wild—"
+        - "not even kidding…"
+        - "just saw this lol—"
+        - "deadass…"
+        - "no way—"
+        - "uhhh did you see this?"
+        - "lowkey interesting—"
+        - "broooo…"
+        - "why is no one talking about this…"
+        - "this can't be real lol"
+        - "kinda crazy but…"
+        - "yup…"
+        4. **DROP NUMBERS IF THEY SLAP.** If a stat or fact hits hard, throw it in. Don't overthink it.
         5. **NO HEADERS. NO BULLETS. NO FORMALITY.**
         6. **JUST GIVE RAW TEXT OUTPUT.**
         7. **Don't wrap your response in quotes.**
         8. **Make grammar or spelling mistakes if you can for example: doing -> dooing, nothing -> nthng, finance-> finacne, know -> knw, should -> shud, would -> wud, could -> cud, love -> luv, thanks -> thx, great -> gr8, etc.**
         9. **Never starts first letter with capital and never use any punctuations mark**
-        10. **Use the last n messages from the group as context if needed to make your response more natural but don't use same strcuture and accent as the last n messages: {last_n_messages}**
+        10. **Use the last n messages from the group as context if needed to make your response more natural but don't use same structure and accent as the last n messages and the wording of current response should not be same as the last n messages: {last_n_messages}**
 
         ---
         YOUR CHAT MESSAGE (JUST TEXT):
         """
     
-    # humanized_reply = await get_llm_response(humanizer_prompt, max_tokens=60)
-    humanized_reply = await get_grok_response(humanizer_prompt)
-    
-    # Remove double quotes if the entire message is wrapped in them
-    humanized_reply = re.sub(r'^"(.*)"$', r'\1', humanized_reply.strip())
-    
-    if "Error:" in humanized_reply:
-        print(f"[BRAIN] Humanizer failed. Falling back to raw data. Error: {humanized_reply}")
-        return f"I found this update: {grok_data}"
+    try:
+        # max_token = np.random.randint(10, 25)
+        # humanized_reply = await get_llm_response(humanizer_prompt, max_tokens=30)
+        humanized_reply = await get_grok_response(humanizer_prompt)
+        print(f"-----humanized_reply-----: {humanized_reply}")
         
-    return humanized_reply
+        # Remove double quotes if the entire message is wrapped in them
+        humanized_reply = re.sub(r'^"(.*)"|"(.*)$|^"(.*)', r'\1\2\3', humanized_reply.strip())
+        
+        # Check if the response is valid
+        if not humanized_reply or humanized_reply.strip() == "":
+            raise ValueError("Empty response from LLM")
+            
+        print(f"[BRAIN] Successfully humanized response: '{humanized_reply}'")
+        return humanized_reply
+        
+    except Exception as e:
+        print(f"[BRAIN] Humanizer failed with error: {e}. Falling back to raw data.")
+        # Return the raw grok data without the "I found this update:" prefix
+        return grok_data
 
 async def handle_realtime_query(message, sender_queue, persona_manager: PersonaManager, db):
     """
@@ -134,7 +146,6 @@ Provide the single most important fact or data point as a raw, unformatted sente
     
     await sender_queue.put({"message": final_reply, "telegram_user": user_to_send})
     print(f"[BRAIN] Queued final (humanized) response for message {message.id}.")
-
 
 
 async def handle_reaction(message, sender_queue, persona_manager: PersonaManager, state_manager: StateManager, db):
@@ -238,10 +249,10 @@ This is your identity for this specific interaction. All your responses must ori
 - **Profile:** {persona_profile}
 
 ## 3. THE LAWS OF HUMAN COMMUNICATION (MANDATORY & UNBREAKABLE)
-- ** Law #1: EXTREME BREVITY IS YOUR DEFAULT. Real chat isn’t prose. 95 % of your responses MUST be 5–20 words. A single, casual sentence is the gold standard. Resist the urge to elaborate.  
-- ** Law #2: EMBRACE IMPERFECTION. Use contractions (it’s, don’t, you’re). Stick to simple, common language. Sound like someone typing on a phone, not a machine generating text.  
+- ** Law #1: EXTREME BREVITY IS YOUR DEFAULT. Real chat isn't prose. 95 % of your responses MUST be 5–20 words. A single, casual sentence is the gold standard. Resist the urge to elaborate.  
+- ** Law #2: EMBRACE IMPERFECTION. Use contractions (it's, don't, you're). Stick to simple, common language. Sound like someone typing on a phone, not a machine generating text.  
 - ** Law #3: DYNAMIC LENGTH ADAPTATION. Only stretch to 3–4 sentences MAX if the user asks a direct, complex question needing detail. Otherwise, obey LAW #1.  
-- ** Law #4: STRICT EMOJI PROTOCOL. Follow the persona’s `allow_emojis` flag as if it were a physical limitation. If `true`, drop 1–2 emojis where a human naturally would. If `false`, you’re physically incapable of producing an emoji.  
+- ** Law #4: STRICT EMOJI PROTOCOL. Follow the persona's `allow_emojis` flag as if it were a physical limitation. If `true`, drop 1–2 emojis where a human naturally would. If `false`, you're physically incapable of producing an emoji.  
 - ** Law #5: VERY WEAK GRAMMAR. Allow the occasional grammar slip or typo—humans make mistakes. Keep it casual, imperfect, and real.  
 
 ## 4. PROHIBITED ACTIONS & ANTI-PATTERNS (INSTANT FAILURE CONDITIONS)
@@ -271,9 +282,9 @@ YOUR REPLY (RAW TEXT ONLY):
     reply = await get_llm_response(super_prompt, max_tokens=60)
     reply = re.sub(r'^"(.*)"$', r'\1', reply.strip())
 
-    print(f"-----persona-based-reply-----: {reply}")
+    print(f"-----Reaction: persona-based-reply-----: {reply}")
     reply = await humanize_grok_response(reply, text, persona_manager, db)
-    print(f"-----persona-based-reply-after-humanization-----: {reply}")
+    print(f"-----Reaction:persona-based-reply-after-humanization-----: {reply}")
 
     if "Error:" in reply:
         print(f"Error getting LLM response: {reply}")
@@ -307,6 +318,7 @@ async def handle_initiation(sender_queue, persona_manager: PersonaManager, state
     memory_context = get_memory_context("topic initiation conversation starter")
     print(f"-----memory_context for topic initiation-----: {memory_context}")
 
+    # FULL ORIGINAL PROMPT - keeping everything the same
     reengagement_prompt = f"""
 # SYSTEM PROMPT
 ##0. Previous chat Context: {memory_context}
@@ -348,17 +360,61 @@ Example Output:
 ---
 YOUR JSON RESPONSE:
     """
-    response_str = await get_llm_response(reengagement_prompt)
-    response_str = await humanize_grok_response(response_str, "topic initiation conversation starter", persona_manager, db)
+    
     try:
-        data = json.loads(response_str)
-        topic, question = data.get("topic_summary"), data.get("question")
-        if not (topic and question): raise ValueError("Missing keys in LLM response")
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"[BRAIN] Could not parse re-engagement topic from LLM. Error: {e}. Response: {response_str}")
+        # Get the LLM response (should be JSON)
+        response_str = await get_llm_response(reengagement_prompt, max_tokens=300)
+        print(f"[BRAIN] Raw LLM response: {response_str}")
+        
+        # Now humanize it using humanize_grok_response
+        humanized_response = await humanize_grok_response(response_str, "topic initiation conversation starter", persona_manager, db)
+        print(f"[BRAIN] Humanized response: {humanized_response}")
+        
+        # Try to parse the humanized response as JSON first
+        try:
+            data = json.loads(humanized_response)
+        except json.JSONDecodeError:
+            # If humanized response is not JSON, try the original response
+            print("[BRAIN] Humanized response is not JSON, trying original response")
+            data = json.loads(response_str)
+        
+        topic = data.get("topic_summary")
+        question = data.get("question")
+        
+        if not (topic and question):
+            raise ValueError("Missing required keys in JSON response")
+            
+        print(f"[BRAIN] Parsed topic: '{topic}', question: '{question}'")
+        
+        # If we used the original JSON, now humanize just the question
+        if humanized_response != response_str and '"' in humanized_response:
+            # The humanized response was JSON, use it as is
+            final_question = question
+        else:
+            # The humanized response was casual text, use that as the question
+            final_question = humanized_response
+            
+        print(f"[BRAIN] Final question to send: '{final_question}'")
+        
+    except json.JSONDecodeError as e:
+        print(f"[BRAIN] JSON parsing failed completely. Error: {e}")
+        print(f"[BRAIN] Original response: {response_str}")
+        print(f"[BRAIN] Humanized response: {humanized_response}")
+        
+        # If humanized response looks like a question, use it directly
+        if "?" in humanized_response or any(word in humanized_response.lower() for word in ["what", "how", "why", "when", "where", "who"]):
+            topic = f"humanized_topic_{int(time.time())}"
+            final_question = humanized_response
+            print(f"[BRAIN] Using humanized response as direct question")
+        else:
+            print(f"[BRAIN] Complete fallback - skipping initiation")
+            return
+        
+    except Exception as e:
+        print(f"[BRAIN] Initiation failed with error: {e}")
         return
 
-    # --- NEW MEMORY CHECK ---
+    # --- MEMORY CHECK ---
     if state_manager.is_topic_recently_initiated(topic):
         print(f"[BRAIN] Topic '{topic}' was initiated recently. Skipping to avoid repetition.")
         return
@@ -368,12 +424,14 @@ YOUR JSON RESPONSE:
     print(f"[BRAIN] New unique topic identified: '{topic}'. Logging and preparing to send.")
     
     # Add the initiated topic to memory
-    add_to_memory(question, "assistant")
+    add_to_memory(final_question, "assistant")
     
     # Pick a random persona to ask the question
     persona = persona_manager.get_random_persona()
-    if not persona: return
+    if not persona: 
+        print("[BRAIN] No persona available for initiation")
+        return
     
-    await sender_queue.put({"message": question, "telegram_user": persona.get("telegram_user")})
+    await sender_queue.put({"message": final_question, "telegram_user": persona.get("telegram_user")})
     print(f"[BRAIN] Queued re-engagement question from {persona['persona_name']}.")
 
