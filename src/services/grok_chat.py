@@ -35,7 +35,7 @@ async def get_grok_response(content: str, model: str = "grok-3-latest") -> str:
     payload = {
         "model": model,
         "messages": messages,
-        "temperature": 0.2,
+        "temperature": 0.9,
         "search_parameters": {
             "mode": "auto"               # Let Grok decide when to search
         }
