@@ -34,6 +34,7 @@ APP_CONFIG = {
     "xai_api_key": os.getenv("X_API_KEY"),
     "triage_model": os.getenv("TRIAGE_MODEL", "gpt-3.5-turbo"),
     "response_context_messages": int(os.getenv("RESPONSE_CONTEXT_MESSAGES",4)),
+    "link_post_cooldown_mins": int(os.getenv("LINK_POST_COOLDOWN_MINS", 15)),
 }
 
 TELEGRAM_USERS = {}

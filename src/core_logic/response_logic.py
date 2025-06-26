@@ -12,6 +12,7 @@ from src.services.fetch_db import get_last_n_messages_as_text
 from src.services.grok_chat import get_grok_response
 from src.core_logic.memory import get_memory_context, add_to_memory
 
+
 import time
 import os
 import numpy as np
@@ -447,3 +448,83 @@ YOUR JSON RESPONSE:
     await sender_queue.put({"message": final_question, "telegram_user": persona.get("telegram_user")})
     print(f"[BRAIN] Queued re-engagement question from {persona['persona_name']}.")
 
+async def handle_scheduled_link_post(link_info: dict, persona_manager: PersonaManager, db):
+    """
+    Handles the entire intelligent process of posting a scheduled link.
+    Returns a dictionary for the sender_queue or None on failure.
+    """
+    link = link_info.get("link")
+    description = link_info.get("description")
+    if not link or not description:
+        return None
+
+    print(f"[SCHEDULER] Processing link: {link}")
+
+    # 1. Content-Aware Persona Selection
+    # We use the link's description to find the best persona
+    print("[SCHEDULER] Finding best persona for this content...")
+    description_embedding = await get_embedding(description)
+    chosen_persona_name = None
+    if PERSONA_EMBEDDINGS and description_embedding:
+        persona_names = list(PERSONA_EMBEDDINGS.keys())
+        persona_vectors = list(PERSONA_EMBEDDINGS.values())
+        
+        desc_vector = np.array(description_embedding).reshape(1, -1)
+        scores = cosine_similarity(desc_vector, np.array(persona_vectors))
+        
+        best_match_index = np.argmax(scores)
+        chosen_persona_name = persona_names[best_match_index]
+        print(f"[SCHEDULER] Best persona match: '{chosen_persona_name}'")
+    
+    if not chosen_persona_name:
+        chosen_persona = persona_manager.get_random_persona()
+    else:
+        chosen_persona = persona_manager.get_persona_by_name(chosen_persona_name)
+    
+    if not chosen_persona:
+        print("[SCHEDULER] ERROR: Could not select a persona. Aborting.")
+        return None
+
+    # 2. Dynamic Contextualization
+    print("[SCHEDULER] Fetching recent chat for context...")
+    chat_context = await get_last_n_messages_as_text(str(APP_CONFIG['telegram_group_id']), 5, db)
+
+    persona_profile = f"Role: {chosen_persona.get('role', '')}. Voice: {chosen_persona.get('signature_voice', {}).get('tone', '')}."
+
+    # 3. Build and Execute the Link Sharing Prompt
+    link_sharing_prompt = f"""
+# YOUR ROLE
+You are a member of a chat group acting as the following persona. Your task is to share a link in a natural, human-like way.
+
+# PERSONA TO EMBODY
+- Name: {chosen_persona['persona_name']}
+- Profile: {persona_profile}
+
+# CONTENT TO SHARE
+- Link: {link}
+- Description: {description}
+
+# RECENT CHAT CONTEXT
+---
+{chat_context}
+---
+
+# YOUR TASK
+Based on the persona, the link, and the recent chat context, write a short, casual message (1-2 sentences) to share the link.
+- **If the link is relevant to the recent context**, connect it naturally.
+- **If the link is NOT relevant**, introduce it as a new, interesting thought.
+- **You MUST include the full link URL** in your response.
+
+YOUR CHAT MESSAGE (RAW TEXT ONLY):
+"""
+    
+    crafted_message = await get_llm_response(link_sharing_prompt, max_tokens=100)
+
+    if "Error:" in crafted_message or not crafted_message.strip():
+        print(f"[SCHEDULER] ERROR: LLM failed to craft a message for the link.")
+        return None
+
+    return {
+        "message": crafted_message,
+        "telegram_user": chosen_persona.get("telegram_user")
+    }
