@@ -70,11 +70,21 @@ async def main():
                 raise Exception(f"Client for session '{session_name}' is not authorized.")
         
         print("--- Bot is fully operational. Press Ctrl+C to stop. ---")
-        valid_clients = [c for c in all_clients if c is not None]
-
+        valid_clients = [
+    c for c in all_clients
+    if c is not None and hasattr(c, "run_until_disconnected") and callable(c.run_until_disconnected)
+]
+        # Only pass non-None, awaitable coroutines to asyncio.gather
+        
+        coros = []
+        for c in valid_clients:
+            coro = c.run_until_disconnected()
+            if coro is not None and hasattr(coro, "__await__"):
+                coros.append(coro)
+        
+        await asyncio.gather(*coros)
         
         # This will run all clients until they are disconnected
-        await asyncio.gather(*(client.run_until_disconnected() for client in valid_clients))
 
 if __name__ == "__main__":
     try:
